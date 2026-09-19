@@ -409,9 +409,18 @@ The generated figures can be exported to PNG, JPEG, SVG and PDF.
 
 Specify the project license here.
 
-
 ---
 
 ## Author
 
 Dr. geol. Faustino Cetraro
+
+---
+
+## Interface
+
+<img width="1498" height="901" alt="img1" src="https://github.com/user-attachments/assets/46e6675c-cc7c-4661-a6ac-d15b0a7978da" />
+
+---
+
+<img width="1498" height="900" alt="img2" src="https://github.com/user-attachments/assets/f25ed37b-24f0-4753-8548-732af95116b2" />
