@@ -96,6 +96,7 @@ Available elements include:
 * **Poles**
 * **Planes**
 * **Global Mean**
+* **Global Best Fit**
 * **Density Contours**
 * **Rose Diagram**
 
