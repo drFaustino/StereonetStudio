@@ -1,0 +1,23 @@
+[general]
+name=StereonetStudio
+qgisMinimumVersion=4.0
+qgisMaximumVersion=4.99
+description=Professional stereographic projection (stereonet): polar/equatorial grid, poles, density contours, rose diagram, kinematic analysis (planar slide, wedge slide, flexural and direct toppling), with import from CSV/TXT files or project vector layers. User interface fully translated (Italian/English).
+
+about=StereonetStudio draws a stereographic projection (equal-angle / equal-area, lower/upper hemisphere, polar or equatorial grid) starting from structural data (dip/dip direction, strike/dip, trend/plunge), imported from CSV/TXT files or directly from vector layers loaded into the project (with automatic field selection in the menus). Modern tabbed interface (Stereonet, Data, Kinematic Analysis, Rosette), fully translated into Italian and English, with comprehensive options for labels, line weights, colors, poles, density contours (poles, intersections, data column; solid or line style, with fill extending to the great circle boundary), rose diagram of directions, and a complete kinematic analysis module (planar slide, wedge slide, flexural toppling, direct toppling) with envelopes, friction cones, lateral limits, and highlighted zones. The legend and density scale (both in bold, with configurable text size for title/legend/items) are positioned in the top left corner, right below the title which is always fully visible. The panel opens as a pre-resized window and stays on top until closed.
+
+version=1.0.0
+author=Dr. Geol. Faustino Cetraro
+email=geol-faustino@libero.it
+
+tracker=https://github.com/drFaustino/StereonetStudio
+repository=https://github.com/drFaustino/StereonetStudio
+homepage=https://github.com/drFaustino/StereonetStudio
+
+category=Plugins
+icon=icon.png
+experimental=False
+deprecated=False
+
+tags=stereonet,stereographic projection,structural geology,kinematic analysis,dip,strike,rock mass,geologia strutturale,rosette,Dips
+
