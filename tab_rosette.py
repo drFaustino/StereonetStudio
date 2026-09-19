@@ -15,7 +15,8 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from qgis.PyQt.QtCore import Qt, pyqtSignal
-from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QCheckBox
+from qgis.PyQt.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+                                 QCheckBox, QSpinBox)
 
 from . import settings as cfg
 from . import stereonet_math as sm
@@ -49,8 +50,36 @@ class RosetteTab(QWidget):
         opts_row.addWidget(self.chk_show_on_plot)
         opts_row.addStretch()
         layout.addLayout(opts_row)
+
+        # Dato rappresentato (Dips: "Plot Data = Apparent Strike") e filtro sul dip
+        # (Dips: "Minimum / Maximum Angle To Plot").
+        opts_row2 = QHBoxLayout()
+        opts_row2.addWidget(QLabel(self.tr('Dato:')))
+        self.cmb_data = QComboBox()
+        self.cmb_data.addItem(self.tr('Strike'), 'strike')
+        self.cmb_data.addItem(self.tr('Direzione di immersione'), 'dipdir')
+        opts_row2.addWidget(self.cmb_data)
+        opts_row2.addSpacing(16)
+        opts_row2.addWidget(QLabel(self.tr('Dip min:')))
+        self.spn_min_dip = QSpinBox()
+        self.spn_min_dip.setRange(0, 90)
+        self.spn_min_dip.setValue(0)
+        self.spn_min_dip.setSuffix('°')
+        opts_row2.addWidget(self.spn_min_dip)
+        opts_row2.addWidget(QLabel(self.tr('Dip max:')))
+        self.spn_max_dip = QSpinBox()
+        self.spn_max_dip.setRange(0, 90)
+        self.spn_max_dip.setValue(90)
+        self.spn_max_dip.setSuffix('°')
+        opts_row2.addWidget(self.spn_max_dip)
+        opts_row2.addStretch()
+        layout.addLayout(opts_row2)
+
         self.cmb_bin_width.currentTextChanged.connect(lambda _t: self.options_changed.emit())
         self.chk_show_on_plot.toggled.connect(lambda _c: self.options_changed.emit())
+        self.cmb_data.currentIndexChanged.connect(lambda _i: self.options_changed.emit())
+        self.spn_min_dip.valueChanged.connect(lambda _v: self.options_changed.emit())
+        self.spn_max_dip.valueChanged.connect(lambda _v: self.options_changed.emit())
 
         self.figure = Figure(figsize=(5, 5), dpi=100)
         self.canvas = FigureCanvas(self.figure)
@@ -60,6 +89,15 @@ class RosetteTab(QWidget):
         self.lbl_info.setObjectName('SNRosetteInfo')
         self.lbl_info.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(self.lbl_info)
+
+    def data_mode(self):
+        return self.cmb_data.currentData() or 'strike'
+
+    def angles(self, planes):
+        """Angoli da rappresentare (strike o dipdir), dopo il filtro sul dip.
+        Ritorna (lista_angoli, modalita')."""
+        mode = self.data_mode()
+        return sm.rosette_angles(planes, mode, self.spn_min_dip.value(), self.spn_max_dip.value()), mode
 
     def bin_width(self):
         return int(self.cmb_bin_width.currentText().replace('°', ''))
@@ -80,9 +118,9 @@ class RosetteTab(QWidget):
             self.canvas.draw_idle()
             return
 
-        dipdirs = [p['dipdir'] for p in planes]
+        angles, mode = self.angles(planes)
         bw = self.bin_width()
-        counts, bin_width = sm.rosette_bins(dipdirs, bin_width=bw)
+        counts, bin_width = sm.rosette_bins(angles, bin_width=bw)
 
         ax = self.figure.add_subplot(111, projection='polar')
         ax.set_theta_zero_location('N')
@@ -93,12 +131,15 @@ class RosetteTab(QWidget):
                linewidth=0.4, alpha=0.85)
         ax.set_yticklabels([])
         ax.tick_params(labelsize=8)
-        ax.set_title(self.tr('N = {}').format(len(planes)), fontsize=9, pad=14)
+        ax.set_title(self.tr('N = {}').format(len(angles)), fontsize=9, pad=14)
         self.figure.tight_layout()
         self.canvas.draw_idle()
 
-        mean_dir = sm.circular_mean_deg(dipdirs)
-        if mean_dir is not None:
-            self.lbl_info.setText(self.tr('Mean: {:.0f}°   n = {}').format(mean_dir, len(planes)))
+        if mode == 'strike':
+            mean_dir = sm.axial_mean_deg(angles)
         else:
-            self.lbl_info.setText(self.tr('n = {}').format(len(planes)))
+            mean_dir = sm.circular_mean_deg(angles)
+        if mean_dir is not None:
+            self.lbl_info.setText(self.tr('Mean: {:.0f}°   n = {}').format(mean_dir, len(angles)))
+        else:
+            self.lbl_info.setText(self.tr('n = {}').format(len(angles)))

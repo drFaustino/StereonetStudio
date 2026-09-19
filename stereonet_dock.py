@@ -17,6 +17,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import Polygon, Circle
 from matplotlib.lines import Line2D
+from matplotlib.colors import ListedColormap
 
 from qgis.PyQt.QtCore import Qt, QSize
 from qgis.PyQt.QtWidgets import (
@@ -33,8 +34,17 @@ from .tab_data import DataTab
 from .tab_kinematic_results import KinematicResultsTab
 from .tab_rosette import RosetteTab
 
+# Scala di densita' in stile Dips (grigio-azzurro -> verde -> giallo -> rosso)
+DIPS_DENSITY_COLORS = ['#e9ebf1', '#d5eaee', '#b4ece0', '#98f0c6', '#8bee9d',
+                       '#82ee6c', '#c6f04f', '#ffe23f', '#ff8a1f', '#ff0000']
+DIPS_DENSITY_CMAP = ListedColormap(DIPS_DENSITY_COLORS, name='dips_density')
+
 SET_COLORS = ['#1f6fb2', '#e67e22', '#27ae60', '#8e44ad', '#c0392b',
               '#16a085', '#d4ac0d', '#7f8c8d', '#2c3e50', '#e91e8c']
+
+
+def font_elements_bm(s):
+    return s.get('font_size_elements', 7.0) + 1
 
 
 class StereonetDock(QDockWidget):
@@ -137,6 +147,8 @@ class StereonetDock(QDockWidget):
         self.stereonet_tab.chk_pole.toggled.connect(self._on_stereonet_options_changed)
         self.stereonet_tab.chk_planes.toggled.connect(self._on_stereonet_options_changed)
         self.stereonet_tab.chk_global_mean.toggled.connect(self._on_stereonet_options_changed)
+        self.stereonet_tab.chk_best_fit.toggled.connect(self._on_stereonet_options_changed)
+        self.stereonet_tab.btn_best_fit.clicked.connect(self._on_stereonet_options_changed)
         self.stereonet_tab.btn_bg.clicked.connect(self._on_stereonet_options_changed)
         self.stereonet_tab.btn_grid.clicked.connect(self._on_stereonet_options_changed)
         self.stereonet_tab.btn_mean.clicked.connect(self._on_stereonet_options_changed)
@@ -411,6 +423,9 @@ class StereonetDock(QDockWidget):
                 mx, my = sm.project_vector(mean_v, projection, hemisphere)
                 ax.scatter([mx], [my], marker='+', s=110, color=s.get('color_global_mean', '#1b5e20'),
                            linewidth=2.0, zorder=6)
+                ax.annotate('gm', (mx, my), xytext=(5, -11), textcoords='offset points',
+                            color=s.get('color_global_mean', '#1b5e20'), fontsize=s.get('font_size_elements', 7.0) + 1,
+                            fontweight='bold', zorder=7)
                 mean_dipdir, mean_dip = sm.plane_from_pole(mean_v)
                 legend_handles.append(Line2D([0], [0], marker='+', color=s.get('color_global_mean', '#1b5e20'),
                                               markersize=10, linewidth=0,
@@ -419,6 +434,26 @@ class StereonetDock(QDockWidget):
                 mean_gc = sm.great_circle_of_plane(mean_dipdir, mean_dip)
                 gx, gy = sm.project_points_masked(mean_gc, projection, hemisphere)
                 ax.plot(gx, gy, color=s.get('color_global_mean', '#1b5e20'), linewidth=2.0, linestyle='--', zorder=4)
+
+        # ---- Global Best Fit (piano di miglior adattamento ai poli) ----
+        if s.get('show_best_fit', False) and planes:
+            bf_color = s.get('color_best_fit', '#0000ff')
+            for set_name in set_names:
+                vecs = pole_vectors_by_set.get(set_name, [])
+                bf_v = sm.best_fit_pole_vector(vecs)
+                if bf_v is None:
+                    continue
+                bx, by = sm.project_vector(bf_v, projection, hemisphere)
+                ax.scatter([bx], [by], marker='+', s=110, color=bf_color, linewidth=2.0, zorder=6)
+                ax.annotate('bm', (bx, by), xytext=(5, -11), textcoords='offset points',
+                            color=bf_color, fontsize=font_elements_bm(s), fontweight='bold', zorder=7)
+                bf_dipdir, bf_dip = sm.plane_from_pole(bf_v)
+                bgx, bgy = sm.project_points_masked(sm.great_circle_of_plane(bf_dipdir, bf_dip, n_pts=361),
+                                                    projection, hemisphere)
+                ax.plot(bgx, bgy, color=bf_color, linewidth=1.6, zorder=4)
+                legend_handles.append(Line2D([0], [0], marker='+', color=bf_color, markersize=10, linewidth=1.6,
+                                              label=self.tr('Global Best Fit ({set}: {dipdir:.0f}/{dip:.0f})').format(
+                                                  set=set_name, dipdir=bf_dipdir, dip=bf_dip)))
 
         # ---- analisi cinematica ----
         kin_result = None
@@ -551,15 +586,19 @@ class StereonetDock(QDockWidget):
 
         if len(vectors) < 3:
             return None, None
-        grid = sm.density_grid(vectors, projection, hemisphere, grid_n=110)
+        grid = sm.density_grid(vectors, projection, hemisphere, grid_n=110,
+                               counting_fraction=0.01, distribution='Fisher')
         if grid is None:
             return None, None
         X, Y, Z = grid
-        levels = np.linspace(0, 100, 11)
+        # Densita' assoluta (% dei poli per 1% di area), come "Density
+        # Concentrations" di Dips, con livelli 'tondi' (es. 0-2.5-...-25).
+        levels = sm.nice_density_levels(float(np.nanmax(Z)), n_intervals=10)
+        self.last_density_max = float(np.nanmax(Z))
         if s.get('contour_style', 'Filled') == 'Line':
-            cf = ax.contour(X, Y, Z, levels=levels, cmap='viridis', linewidths=1.0, zorder=2)
+            cf = ax.contour(X, Y, Z, levels=levels, cmap=DIPS_DENSITY_CMAP, linewidths=1.0, zorder=2)
         else:
-            cf = ax.contourf(X, Y, Z, levels=levels, cmap='viridis', alpha=0.65, zorder=2, extend='max')
+            cf = ax.contourf(X, Y, Z, levels=levels, cmap=DIPS_DENSITY_CMAP, alpha=0.85, zorder=2)
 
         # Ritaglia il riempimento esattamente sul contorno del grande cerchio,
         # cosi' lo sfondo colorato arriva fino al bordo senza lasciare una
@@ -623,7 +662,7 @@ class StereonetDock(QDockWidget):
 
     # ------------------------------------------------------------------
     def _draw_rosette(self, fig, planes):
-        dipdirs = [p['dipdir'] for p in planes]
+        angles, _label = self.rosette_tab.angles(planes)
         bin_width = (
             self.rosette_tab.bin_width()
             if hasattr(self, 'rosette_tab')
@@ -631,7 +670,7 @@ class StereonetDock(QDockWidget):
         )
 
         counts, bin_width = sm.rosette_bins(
-            dipdirs,
+            angles,
             bin_width=bin_width
         )
 
@@ -714,23 +753,34 @@ class StereonetDock(QDockWidget):
         legend_handles.append(Line2D([0], [0], color='#000000', linewidth=2.0, label=self.tr('Slope')))
 
         if s['show_construction_lines']:
-            fx, fy = sm.project_points_masked(result.friction_circle, projection, hemisphere)
-            ax.plot(fx, fy, color='#b30000', linewidth=1.2, linestyle=':', zorder=4)
-            legend_handles.append(Line2D([0], [0], color='#b30000', linewidth=1.2, linestyle=':',
-                                          label=self.tr('Friction Angle ({}°)').format(int(s['friction_angle']))))
+            if result.friction_circle is not None:
+                circ = result.friction_circle
+                if hemisphere == 'Superiore':
+                    circ = -circ   # il cerchio e' simmetrico rispetto alla verticale
+                fx, fy = sm.project_points_masked(circ, projection, hemisphere)
+                ax.plot(fx, fy, color='#b30000', linewidth=1.2, linestyle=':', zorder=4)
+                legend_handles.append(Line2D([0], [0], color='#b30000', linewidth=1.2, linestyle=':',
+                                              label=self.tr('Friction Angle ({}°)').format(int(s['friction_angle']))))
 
+            if result.daylight_envelope:
+                ex = [p[0] for p in result.daylight_envelope]
+                ey = [p[1] for p in result.daylight_envelope]
+                ax.plot(ex, ey, color='#000000', linewidth=1.2, zorder=4)
+                legend_handles.append(Line2D([0], [0], color='#000000', linewidth=1.2,
+                                              label=self.tr('Daylight Envelope')))
+
+            # limiti laterali: diametri completi, come in Dips
             for az in result.lateral_limit_lines:
-                a = sm.deg2rad(az)
-                ax.plot([0, math.sin(a)], [0, math.cos(a)], color='#555555', linewidth=1.0,
-                        linestyle='-.', zorder=4)
-            legend_handles.append(Line2D([0], [0], color='#555555', linewidth=1.0, linestyle='-.',
-                                          label=self.tr('Lateral Limit (±{}°)').format(int(s['lateral_limit']))))
+                a_rad = sm.deg2rad(az)
+                ax.plot([-math.sin(a_rad), math.sin(a_rad)], [-math.cos(a_rad), math.cos(a_rad)],
+                        color='#555555', linewidth=1.0, linestyle='-.', zorder=4)
+            if result.lateral_limit_lines:
+                legend_handles.append(Line2D([0], [0], color='#555555', linewidth=1.0, linestyle='-.',
+                                              label=self.tr('Lateral Limit (±{}°)').format(int(s['lateral_limit']))))
 
-        if s['show_highlight'] and result.highlight_sector:
-            hs = result.highlight_sector
-            verts = sm.sector_boundary_points(hs['az_center'], hs['half_width'], hs['rho_min'], hs['rho_max'])
-            poly = Polygon(verts, closed=True, facecolor='#ff6600', alpha=0.30, edgecolor='#cc5200',
-                            linewidth=0.8, zorder=2.5)
+        if s['show_highlight'] and result.highlight_polygon:
+            poly = Polygon(result.highlight_polygon, closed=True, facecolor='#ff6600', alpha=0.30,
+                            edgecolor='#cc5200', linewidth=0.8, zorder=2.5)
             ax.add_patch(poly)
             legend_handles.append(Polygon([(0, 0)], facecolor='#ff6600', alpha=0.30, edgecolor='#cc5200',
                                            label=self.tr('Highlighted Zone')))

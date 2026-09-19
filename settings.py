@@ -60,6 +60,7 @@ DEFAULT_SETTINGS = {
     'color_background': '#ffffff',
     'color_grid_outer': '#1a1a1a',
     'color_global_mean': '#1b5e20',
+    'color_best_fit': '#0000ff',
 
     # Plot Options
     'show_pole': True,
@@ -67,6 +68,7 @@ DEFAULT_SETTINGS = {
     'color_pole': '#1f6fb2',
     'color_plane': '#4a4a4a',
     'show_global_mean': True,
+    'show_best_fit': False,
     'contour_mode': 'Nessuno',
     'contour_style': 'Filled',
     'contour_column': '',

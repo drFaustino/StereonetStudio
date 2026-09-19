@@ -266,9 +266,11 @@ class StereonetTab(QWidget):
         self.chk_pole = QCheckBox(self.tr('Poli'))
         self.chk_planes = QCheckBox(self.tr('Piani'))
         self.chk_global_mean = QCheckBox(self.tr('Global Mean'))
+        self.chk_best_fit = QCheckBox(self.tr('Global Best Fit'))
         chk_row.addWidget(self.chk_pole)
         chk_row.addWidget(self.chk_planes)
         chk_row.addWidget(self.chk_global_mean)
+        chk_row.addWidget(self.chk_best_fit)
         chk_row.addStretch()
         form.addRow(chk_row)
 
@@ -276,11 +278,13 @@ class StereonetTab(QWidget):
         self.btn_pole = ColorButton('#1f6fb2')
         self.btn_plane = ColorButton('#4a4a4a')
         self.btn_mean = ColorButton('#1b5e20')
+        self.btn_best_fit = ColorButton('#0000ff')
 
         for lbl, btn in (
             (self.tr('Poli'), self.btn_pole),
             (self.tr('Piani'), self.btn_plane),
-            (self.tr('Global Mean'), self.btn_mean)
+            (self.tr('Global Mean'), self.btn_mean),
+            (self.tr('Global Best Fit'), self.btn_best_fit)
         ):
             box = QVBoxLayout()
             cap = QLabel(lbl)
@@ -501,6 +505,8 @@ class StereonetTab(QWidget):
         self.btn_pole.set_color(s.get('color_pole', '#1f6fb2'))
         self.btn_plane.set_color(s.get('color_plane', '#4a4a4a'))
         self.chk_global_mean.setChecked(s['show_global_mean'])
+        self.chk_best_fit.setChecked(s.get('show_best_fit', False))
+        self.btn_best_fit.set_color(s.get('color_best_fit', '#0000ff'))
         trc.set_combo_value(self.cmb_contours, s['contour_mode'])
         trc.set_combo_value(
             self.cmb_contour_style, s['contour_style']
@@ -575,6 +581,8 @@ class StereonetTab(QWidget):
         s['color_pole'] = self.btn_pole.color_hex()
         s['color_plane'] = self.btn_plane.color_hex()
         s['show_global_mean'] = self.chk_global_mean.isChecked()
+        s['show_best_fit'] = self.chk_best_fit.isChecked()
+        s['color_best_fit'] = self.btn_best_fit.color_hex()
         s['contour_mode'] = trc.combo_value(self.cmb_contours)
         s['contour_style'] = trc.combo_value(
             self.cmb_contour_style

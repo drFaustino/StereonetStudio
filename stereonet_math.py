@@ -61,17 +61,26 @@ def vector_to_trend_plunge(v):
 
 
 def pole_vector(dipdir_deg, dip_deg):
-    """Vettore polo (normale al piano) di un piano dip/dipdir. Punta verso il basso."""
-    trend = wrap360(dipdir_deg)
+    """Vettore polo (normale al piano) di un piano dip/dipdir, orientato
+    verso il BASSO (emisfero inferiore, convenzione standard/Dips):
+    trend = dipdir + 180, plunge = 90 - dip.
+
+    (Nella versione precedente il trend era = dipdir: il polo risultava
+    ruotato di 180 gradi e "Inferiore" e "Superiore" apparivano scambiati
+    rispetto a Dips.)"""
+    trend = wrap360(dipdir_deg + 180.0)
     plunge = 90.0 - dip_deg
     return trend_plunge_to_vector(trend, plunge)
 
 
 def plane_from_pole(pole_v):
-    """Dato il vettore polo, ricava dipdir/dip del piano."""
-    trend, plunge = vector_to_trend_plunge(pole_v)
+    """Dato il vettore polo (verso il basso), ricava dipdir/dip del piano."""
+    v = np.asarray(pole_v, dtype=float)
+    if v[2] < 0:
+        v = -v
+    trend, plunge = vector_to_trend_plunge(v)
     dip = 90.0 - plunge
-    dipdir = wrap360(trend)
+    dipdir = wrap360(trend + 180.0)
     return dipdir, dip
 
 
@@ -102,9 +111,10 @@ def to_internal_dipdir_dip(value1, value2, fmt):
         strike, dip = value1, value2
         dipdir = wrap360(strike - 90.0)
     elif fmt == 'Trend / Plunge':
-        # Interpretato come trend/plunge del POLO della discontinuita'
+        # Interpretato come trend/plunge del POLO (verso il basso) della
+        # discontinuita': dipdir = trend + 180
         trend, plunge = value1, value2
-        dipdir = wrap360(trend)
+        dipdir = wrap360(trend + 180.0)
         dip = 90.0 - plunge
     else:
         dip, dipdir = value1, value2
@@ -136,7 +146,10 @@ def project_vector(v, projection, hemisphere):
             n, e, d = -n, -e, -d
         d_eff = d
     else:  # Superiore
-        if d > 0:
+        # d = 0 (vettore orizzontale, es. polo di un piano verticale) viene
+        # trattato come "verso il basso" e ribaltato: e' la scelta continua
+        # con i punti vicini.
+        if d > -1e-12:
             n, e, d = -n, -e, -d
         d_eff = -d
     rho = _radius(d_eff, projection)
@@ -308,6 +321,21 @@ def mean_pole_vector(pole_vectors):
     return normalize(s)
 
 
+def best_fit_pole_vector(pole_vectors):
+    """Polo del piano di miglior adattamento ("Global Best Fit") ai poli:
+    autovettore di minimo autovalore del tensore di orientazione
+    T = sum(v v^T). Restituito verso il basso (d >= 0). None se < 3 poli."""
+    if len(pole_vectors) < 3:
+        return None
+    arr = np.array(pole_vectors, dtype=float)
+    t = arr.T @ arr
+    w, vecs = np.linalg.eigh(t)          # autovalori crescenti
+    v = vecs[:, 0]
+    if v[2] < 0:
+        v = -v
+    return normalize(v)
+
+
 def resultant_length_ratio(pole_vectors):
     """R/N: misura di concentrazione dei dati (1 = perfettamente concentrati)."""
     if len(pole_vectors) == 0:
@@ -355,27 +383,53 @@ def plane_intersections(planes_dipdir_dip, set_labels=None, min_angle_deg=3.0):
 
 
 # ----------------------------------------------------------------------
-# Stima di densita' (tipo Kamb semplificato) per i contorni
+# Densita' dei poli: conteggio "a cono flottante" sulla sfera (come Dips)
 # ----------------------------------------------------------------------
 
-def density_grid(data_vectors, projection, hemisphere, grid_n=70):
-    """Calcola una griglia (X, Y, Z) di densita' percentuale sullo stereonet
-    a partire da un elenco di vettori unitari (poli o intersezioni).
+def _fisher_kernel_k(alpha_rad):
+    """Costante K del nucleo tipo Fisher usato da Dips: campana di altezza
+    massima 1, raggio di base = 2 * raggio del cono di conteggio, e volume
+    totale uguale a quello del cilindro di Schmidt (altezza 1, raggio alpha).
+    Si risolve  (1 - exp(-K (1 - cos 2a))) / K = 1 - cos a  per bisezione."""
+    target = 1.0 - math.cos(alpha_rad)
+    c2 = 1.0 - math.cos(2.0 * alpha_rad)
+    lo, hi = 1e-6, 1e6
+    for _ in range(200):
+        mid = math.sqrt(lo * hi)
+        f = (1.0 - math.exp(-mid * c2)) / mid - target
+        if f > 0:
+            lo = mid
+        else:
+            hi = mid
+    return math.sqrt(lo * hi)
 
-    Usa un kernel esponenziale tipo von Mises-Fisher come stima speditiva
-    (non e' la statistica di Kamb rigorosa)."""
-    data_vectors = [v if v[2] >= 0 else -v for v in data_vectors]  # riporta sempre nell'emisfero inferiore nativo
+
+def density_grid(data_vectors, projection, hemisphere, grid_n=110,
+                 counting_fraction=0.01, distribution='Fisher'):
+    """Griglia (X, Y, Z) di concentrazione dei poli sullo stereonet, con lo
+    stesso schema di Dips:
+
+    * il conteggio e' fatto sulla SFERA (non sulla proiezione), con un cono
+      centrato su ciascun nodo della griglia;
+    * il cono ha area pari a `counting_fraction` (default 1%) dell'emisfero:
+      cos(alpha) = 1 - counting_fraction  (alpha ~ 8.11 gradi per l'1%);
+    * 'Schmidt': ogni polo dentro il cono vale 1;
+      'Fisher': ogni polo contribuisce con una campana exp(-K(1-cos t)) di
+      altezza 1 e raggio di base 2*alpha (K calcolato in modo che il volume
+      resti uguale a quello di Schmidt);
+    * Z = somma dei contributi / N * 100  ->  % dei poli per 1% di area
+      (cosi' il massimo e' confrontabile con "Maximum Density" di Dips).
+
+    I poli sono dati assiali: si usa |cos| per gestire il bordo del cerchio
+    primitivo."""
     if len(data_vectors) == 0:
         return None
-    data = np.array(data_vectors)
+    data = np.array([v if v[2] >= 0 else -v for v in data_vectors], dtype=float)
     n_data = len(data)
 
     lin = np.linspace(-1.02, 1.02, grid_n)
     X, Y = np.meshgrid(lin, lin)
     Z = np.full_like(X, np.nan)
-
-    # concentrazione tipo Kamb: piu' dati -> kernel piu' stretto
-    kappa = max(3.0, 3.0 * math.sqrt(max(1, n_data)))
 
     grid_vectors = []
     valid_idx = []
@@ -386,41 +440,85 @@ def density_grid(data_vectors, projection, hemisphere, grid_n=70):
             if rho2 > 1.06:
                 continue
             if rho2 > 1.0:
-                # Punto appena oltre il cerchio primitivo: lo si riporta sul
-                # bordo (invece di scartarlo) in modo che la mappa di densita'
-                # copra l'intero disco fino al contorno del grande cerchio,
-                # senza lasciare una fascia di sfondo non colorata vicino al
-                # bordo. Il riempimento viene poi ritagliato esattamente sul
-                # cerchio in fase di disegno (vedi StereonetDock._draw_contours).
+                # appena oltre il cerchio primitivo: lo si riporta sul bordo
+                # cosi' la mappa copre tutto il disco (ritaglio esatto in
+                # StereonetDock._draw_contours)
                 scale = 0.999 / math.sqrt(rho2)
                 x, y = x * scale, y * scale
             v = inverse_project(x, y, projection, hemisphere)
             if v is None:
                 continue
-            v_native = v if v[2] >= 0 else -v
-            grid_vectors.append(v_native)
+            grid_vectors.append(v if v[2] >= 0 else -v)
             valid_idx.append((i, j))
 
     if len(grid_vectors) == 0:
         return None
-    grid_arr = np.array(grid_vectors)  # (M,3)
-    dots = grid_arr @ data.T  # (M, n_data)
-    dots = np.clip(dots, -1.0, 1.0)
-    weights = np.exp(kappa * (dots - 1.0))
-    dens = weights.sum(axis=1)
+    grid_arr = np.array(grid_vectors)            # (M, 3)
+    cos_t = np.abs(np.clip(grid_arr @ data.T, -1.0, 1.0))   # (M, N)
 
-    max_theoretical = n_data  # se tutti i punti coincidono con la cella
-    dens_pct = 100.0 * dens / max(1e-9, dens.max())
+    alpha = math.acos(1.0 - counting_fraction)
+    cos_a = math.cos(alpha)
+    if str(distribution).lower().startswith('s'):
+        weights = (cos_t >= cos_a).astype(float)
+    else:
+        k = _fisher_kernel_k(alpha)
+        cos_2a = math.cos(2.0 * alpha)
+        weights = np.where(cos_t >= cos_2a, np.exp(-k * (1.0 - cos_t)), 0.0)
 
-    for k, (i, j) in enumerate(valid_idx):
-        Z[i, j] = dens_pct[k]
-
+    dens_pct = 100.0 * weights.sum(axis=1) / n_data
+    for kx, (i, j) in enumerate(valid_idx):
+        Z[i, j] = dens_pct[kx]
     return X, Y, Z
+
+
+def nice_density_levels(z_max, n_intervals=10):
+    """Livelli 'tondi' per la scala di densita', come in Dips
+    (es. massimo 24.86% -> 0, 2.5, 5, ... 25)."""
+    if not np.isfinite(z_max) or z_max <= 0:
+        return np.linspace(0.0, 1.0, n_intervals + 1)
+    raw = z_max / n_intervals
+    base = 10.0 ** math.floor(math.log10(raw))
+    for m in (1.0, 2.0, 2.5, 5.0, 10.0):
+        step = m * base
+        if step >= raw - 1e-12:
+            break
+    return np.arange(n_intervals + 1) * step
 
 
 # ----------------------------------------------------------------------
 # Rosetta delle direzioni (dip direction / strike)
 # ----------------------------------------------------------------------
+
+def rosette_angles(planes, mode='strike', min_dip=0.0, max_dip=90.0):
+    """Angoli (gradi) da inserire nella rosetta.
+
+    mode = 'strike'  -> direzione (strike, regola mano destra = dipdir - 90),
+                        come "Apparent Strike" di Dips con normale verticale;
+    mode = 'dipdir'  -> direzione di immersione.
+    Vengono considerati solo i piani con min_dip <= dip <= max_dip
+    (in Dips: "Minimum/Maximum Angle To Plot").
+    """
+    out = []
+    for p in planes:
+        if not (min_dip - 1e-9 <= p['dip'] <= max_dip + 1e-9):
+            continue
+        if mode == 'strike':
+            out.append(wrap360(p['dipdir'] - 90.0))
+        else:
+            out.append(wrap360(p['dipdir']))
+    return out
+
+
+def axial_mean_deg(azimuths_deg):
+    """Media di dati assiali (strike): angoli raddoppiati, risultato 0-180."""
+    if not azimuths_deg:
+        return None
+    s = sum(math.sin(deg2rad(2 * a)) for a in azimuths_deg)
+    c = sum(math.cos(deg2rad(2 * a)) for a in azimuths_deg)
+    if abs(s) < 1e-9 and abs(c) < 1e-9:
+        return 0.0
+    return (rad2deg(math.atan2(s, c)) / 2.0) % 180.0
+
 
 def rosette_bins(dipdirs, bin_width=10):
     """Istogramma circolare (0-360) delle direzioni di immersione, in classi
@@ -443,109 +541,152 @@ def rosette_bins(dipdirs, bin_width=10):
 class KinematicResult:
     def __init__(self):
         self.slope_great_circle = None      # Nx3 vettori
-        self.friction_circle = None         # Nx3 vettori (piccola circonferenza)
-        self.lateral_limit_lines = []       # lista di coppie di punti (centro->bordo), vettori
-        self.highlight_sector = None        # dict con az_min, az_max, rho_min, rho_max (per disegno a settore)
-        self.feasible_mask = None           # array bool, stessa lunghezza dei poli in input
+        self.friction_circle = None         # Nx3 vettori (piccola circonferenza) o None
+        self.friction_kind = None           # 'friction' | 'limit' | None
+        self.lateral_limit_lines = []       # azimuth (gradi) delle linee limite laterale
+        self.highlight_polygon = None       # lista di (x, y) gia' proiettati (zona critica)
+        self.daylight_envelope = None       # lista di (x, y): daylight envelope (poli)
+        self.feasible_mask = None           # array bool
         self.n_feasible = 0
         self.description = ''
 
 
-def _rho_for_dip_at(dipdir_for_pole, dip_value, projection, hemisphere):
-    """Raggio (rho) sul grafico del polo di un piano immaginario con la
-    stessa direzione di immersione dello sperone/scarpata e dip = dip_value."""
-    v = pole_vector(dipdir_for_pole, dip_value)
-    _, y = project_vector(v, projection, hemisphere)
-    x, y = project_vector(v, projection, hemisphere)
-    return math.hypot(x, y)
+def apparent_dip_deg(slope_dip, delta_deg):
+    """Dip apparente della scarpata lungo una direzione che forma l'angolo
+    delta con la sua direzione di immersione: tan(dip_app) = tan(dip) cos(delta).
+    Vale 0 per |delta| >= 90."""
+    c = math.cos(deg2rad(delta_deg))
+    if c <= 1e-12:
+        return 0.0
+    return rad2deg(math.atan(math.tan(deg2rad(min(slope_dip, 89.9999))) * c))
+
+
+def _pole_xy(dipdir, dip, projection, hemisphere):
+    return project_vector(pole_vector(dipdir, dip), projection, hemisphere)
+
+
+def _line_xy(trend, plunge, projection, hemisphere):
+    return project_vector(trend_plunge_to_vector(trend, plunge), projection, hemisphere)
+
+
+def _pole_zone_polygon(dd_center, half_width, dip_in_fn, dip_out_fn, projection, hemisphere, n=61):
+    """Poligono (x,y) della zona critica sul grafico dei POLI: per ogni
+    direzione di immersione dd_center+delta (|delta| <= half_width) il dip del
+    piano deve stare fra dip_in(delta) e dip_out(delta)."""
+    deltas = np.linspace(-half_width, half_width, n)
+    outer, inner = [], []
+    for d in deltas:
+        d_in = dip_in_fn(d)
+        d_out = max(dip_out_fn(d), d_in)
+        outer.append(_pole_xy(dd_center + d, d_out, projection, hemisphere))
+        inner.append(_pole_xy(dd_center + d, d_in, projection, hemisphere))
+    return outer + inner[::-1]
 
 
 def kinematic_analysis(mode, poles_dipdir_dip, slope_dip, slope_dipdir,
                         friction_angle, lateral_limit, projection, hemisphere,
                         planes_for_intersections=None, sets_for_intersections=None):
-    """Esegue una delle 4 analisi cinematiche classiche e restituisce un
-    oggetto KinematicResult pronto per il disegno.
+    """Analisi cinematica con gli stessi criteri di Dips (vettori polo).
 
-    poles_dipdir_dip: lista di tuple (dipdir, dip) delle discontinuita' misurate
+    Scivolamento planare (poli): dip fra l'angolo di attrito e il DIP
+    APPARENTE della scarpata nella direzione del giunto
+    (tan dip < tan(slope dip) * cos(dipdir_giunto - dipdir_scarpata), cioe'
+    polo dentro la "daylight envelope"), entro i limiti laterali. Il cono di
+    attrito per i poli ha raggio = angolo di attrito misurato dal CENTRO.
+
+    Scivolamento a cuneo: rette di intersezione con
+    attrito <= plunge <= dip apparente della scarpata lungo il loro trend
+    (senza limiti laterali, come il test di Markland in Dips).
     """
     res = KinematicResult()
     res.slope_great_circle = great_circle_of_plane(slope_dipdir, slope_dip)
-    res.friction_circle = small_circle_about_axis(np.array([0, 0, 1.0]), 90.0 - friction_angle)
 
-    az_min = wrap360(slope_dipdir - lateral_limit)
-    az_max = wrap360(slope_dipdir + lateral_limit)
+    def _finish_counts():
+        res.n_feasible = int(np.sum(res.feasible_mask)) if res.feasible_mask is not None and len(res.feasible_mask) else 0
 
     if mode == 'Scivolamento Planare':
-        rho_in = _rho_for_dip_at(slope_dipdir, friction_angle, projection, hemisphere)
-        rho_out = _rho_for_dip_at(slope_dipdir, slope_dip, projection, hemisphere)
-        res.highlight_sector = dict(az_center=slope_dipdir, half_width=lateral_limit,
-                                     rho_min=min(rho_in, rho_out), rho_max=max(rho_in, rho_out))
-        res.lateral_limit_lines = [az_min, az_max]
+        # cono di attrito dei poli: raggio angolare = attrito dal centro
+        res.friction_circle = small_circle_about_axis(np.array([0, 0, 1.0]), friction_angle)
+        res.friction_kind = 'friction'
+        res.lateral_limit_lines = [wrap360(slope_dipdir - lateral_limit), wrap360(slope_dipdir + lateral_limit)]
+        res.highlight_polygon = _pole_zone_polygon(
+            slope_dipdir, lateral_limit,
+            lambda d: friction_angle,
+            lambda d: apparent_dip_deg(slope_dip, d),
+            projection, hemisphere)
+        env = [_pole_xy(slope_dipdir + d, apparent_dip_deg(slope_dip, d), projection, hemisphere)
+               for d in np.linspace(-90.0, 90.0, 181)]
+        res.daylight_envelope = env
         mask = []
         for dd, dp in poles_dipdir_dip:
             ang = _angular_diff(dd, slope_dipdir)
-            ok = (ang <= lateral_limit) and (friction_angle <= dp <= slope_dip)
+            ok = (ang <= lateral_limit) and (friction_angle <= dp <= apparent_dip_deg(slope_dip, ang))
             mask.append(ok)
         res.feasible_mask = np.array(mask, dtype=bool)
         res.description = ('Scivolamento planare possibile se: |DipDir_giunto - DipDir_scarpata| <= '
-                            'Limite laterale, e Angolo attrito <= Dip_giunto <= Dip_scarpata.')
+                            'Limite laterale, e Angolo attrito <= Dip_giunto <= Dip apparente della scarpata '
+                            '(polo dentro la daylight envelope).')
 
     elif mode == 'Scivolamento a Cuneo':
         planes = planes_for_intersections if planes_for_intersections else poles_dipdir_dip
         inters = plane_intersections(planes, set_labels=sets_for_intersections)
-        rho_in = _rho_for_dip_at(slope_dipdir, friction_angle, projection, hemisphere)
-        rho_out = _rho_for_dip_at(slope_dipdir, slope_dip, projection, hemisphere)
-        res.highlight_sector = dict(az_center=slope_dipdir, half_width=lateral_limit,
-                                     rho_min=min(rho_in, rho_out), rho_max=max(rho_in, rho_out))
-        res.lateral_limit_lines = [az_min, az_max]
+        # cono di attrito per RETTE (dip vectors): plunge = attrito
+        res.friction_circle = small_circle_about_axis(np.array([0, 0, 1.0]), 90.0 - friction_angle)
+        res.friction_kind = 'friction'
+        res.lateral_limit_lines = []
+        # zona critica: fra il cerchio di attrito e il grande cerchio della scarpata
+        polygon = None
+        if slope_dip > friction_angle:
+            dmax = rad2deg(math.acos(min(1.0, math.tan(deg2rad(friction_angle)) / math.tan(deg2rad(slope_dip)))))
+            deltas = np.linspace(-dmax, dmax, 91)
+            outer = [_line_xy(slope_dipdir + d, max(apparent_dip_deg(slope_dip, d), friction_angle),
+                              projection, hemisphere) for d in deltas]
+            inner = [_line_xy(slope_dipdir + d, friction_angle, projection, hemisphere) for d in deltas]
+            polygon = outer + inner[::-1]
+        res.highlight_polygon = polygon
         mask = []
         for v in inters:
             trend, plunge = vector_to_trend_plunge(v)
             ang = _angular_diff(trend, slope_dipdir)
-            ok = (ang <= lateral_limit) and (friction_angle <= plunge <= slope_dip)
+            ok = (ang < 90.0) and (friction_angle <= plunge <= apparent_dip_deg(slope_dip, ang))
             mask.append(ok)
         res.feasible_mask = np.array(mask, dtype=bool)
         res.intersections = inters
-        res.n_feasible = int(np.sum(res.feasible_mask)) if len(mask) else 0
         res.description = ('Scivolamento a cuneo possibile se il trend/plunge della retta di '
                             'intersezione tra due discontinuita\' cade nel settore evidenziato '
                             '(tra il cono di attrito e la scarpata, entro i limiti laterali).')
-        return res
 
     elif mode == 'Ribaltamento Flessurale':
         opp_dipdir = wrap360(slope_dipdir + 180.0)
         dip_limit = max(0.0, min(90.0, 90.0 - slope_dip + friction_angle))
-        rho_in = _rho_for_dip_at(opp_dipdir, dip_limit, projection, hemisphere)
-        rho_out = _rho_for_dip_at(opp_dipdir, 90.0, projection, hemisphere)
-        res.highlight_sector = dict(az_center=opp_dipdir, half_width=lateral_limit,
-                                     rho_min=min(rho_in, rho_out), rho_max=max(rho_in, rho_out))
+        res.friction_circle = None
         res.lateral_limit_lines = [wrap360(opp_dipdir - lateral_limit), wrap360(opp_dipdir + lateral_limit)]
+        res.highlight_polygon = _pole_zone_polygon(
+            opp_dipdir, lateral_limit, lambda d: dip_limit, lambda d: 90.0, projection, hemisphere)
         mask = []
         for dd, dp in poles_dipdir_dip:
             ang = _angular_diff(dd, opp_dipdir)
-            ok = (ang <= lateral_limit) and (dp >= dip_limit)
-            mask.append(ok)
+            mask.append((ang <= lateral_limit) and (dp >= dip_limit))
         res.feasible_mask = np.array(mask, dtype=bool)
         res.description = ('Ribaltamento flessurale possibile se il giunto immerge (circa) in '
                             'direzione opposta alla scarpata, con Dip >= 90 - Dip_scarpata + Angolo attrito.')
 
     else:  # Ribaltamento Diretto
         dip_limit = max(0.0, min(90.0, 90.0 - friction_angle))
-        rho_in = _rho_for_dip_at(slope_dipdir, dip_limit, projection, hemisphere)
-        rho_out = _rho_for_dip_at(slope_dipdir, 90.0, projection, hemisphere)
-        res.highlight_sector = dict(az_center=slope_dipdir, half_width=lateral_limit,
-                                     rho_min=min(rho_in, rho_out), rho_max=max(rho_in, rho_out))
-        res.lateral_limit_lines = [az_min, az_max]
+        res.friction_circle = small_circle_about_axis(np.array([0, 0, 1.0]), dip_limit)
+        res.friction_kind = 'friction'
+        res.lateral_limit_lines = [wrap360(slope_dipdir - lateral_limit), wrap360(slope_dipdir + lateral_limit)]
+        res.highlight_polygon = _pole_zone_polygon(
+            slope_dipdir, lateral_limit, lambda d: dip_limit, lambda d: 90.0, projection, hemisphere)
         mask = []
         for dd, dp in poles_dipdir_dip:
             ang = _angular_diff(dd, slope_dipdir)
-            ok = (ang <= lateral_limit) and (dp >= dip_limit)
-            mask.append(ok)
+            mask.append((ang <= lateral_limit) and (dp >= dip_limit))
         res.feasible_mask = np.array(mask, dtype=bool)
         res.description = ('Ribaltamento diretto (di blocco) possibile per giunti molto ripidi con '
                             'DipDir prossima a quella della scarpata: Dip >= 90 - Angolo attrito.')
 
-    res.n_feasible = int(np.sum(res.feasible_mask)) if res.feasible_mask is not None and len(res.feasible_mask) else 0
+    _finish_counts()
     return res
 
 
