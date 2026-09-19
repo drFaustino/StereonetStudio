@@ -413,7 +413,7 @@ Specify the project license here.
 
 ## Author
 
-Dr. geol. Faustino Cetraro
+Dr. Geol. Faustino Cetraro
 
 ---
 
