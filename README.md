@@ -425,16 +425,17 @@ Specify the project license here.
 
 ## Author
 
-Dr. geol. Faustino Cetraro
+Dr. Geol. Faustino Cetraro
 
 ## Changelog 1.1.0 (verifica con Dips)
-- Convenzione dei poli corretta: polo verso il basso con trend = dipdir + 180 (prima Inferiore/Superiore risultavano scambiati rispetto a Dips; anche piani, media globale e intersezioni del cuneo).
-- Cono di attrito dei poli: raggio = angolo di attrito misurato dal centro; disegnato anche in emisfero Superiore.
-- Scivolamento planare: criterio con dip apparente della scarpata (daylight envelope), zona critica e limiti laterali come in Dips.
-- Scivolamento a cuneo: criterio di Markland (plunge fra attrito e dip apparente della scarpata), senza limiti laterali.
-- Densita': conteggio su sfera con cono all'1% dell'area e nucleo Fisher, in % assoluta (massimo confrontabile con "Maximum Density" di Dips), livelli tondi e scala colori tipo Dips.
-- Rosetta: dato selezionabile Strike (default, come Dips) / Direzione di immersione, filtro Dip min/max, media assiale per lo strike.
+Includes a dedicated DTM acquisition module with automatic selection of project DTM rasters, local-plane least-squares fitting, configurable sampling radius (1–15 cells), direct map-click acquisition, automatic calculation of Dip, Dip Direction, Strike, Pole Trend/Plunge, and X/Y/Z coordinates. Quality control includes cell count, RMSE, maximum residual, configurable RMSE threshold, optional rejection of measurements exceeding the threshold, and map highlighting of the fitting window. Multiple measurements can be acquired continuously, with a complete structural/topographic table, progressive IDs, Set/Group fields, and ShapeFile, Geopackage, CSV file export. Valid measurements are automatically transferred to the Data tab, while preserving its existing format logic. DTM acquisition and UI logic are kept modular in separate components.
 
-## 1.1.1
-- Etichetta "gm" (grassetto, stesso colore) accanto alla croce Global Mean.
-- Nuova opzione "Global Best Fit" (accanto a Global Mean): polo con croce ed etichetta "bm" in grassetto e piano di miglior adattamento, in blu (colore modificabile).
+<img width="1599" height="901" alt="img1" src="https://github.com/user-attachments/assets/e2f316ae-1535-411d-ab68-4cdeb43fbceb" />
+
+<img width="1599" height="899" alt="img2" src="https://github.com/user-attachments/assets/66652f7e-bb34-4d3f-aac9-e412615a8b68" />
+
+<img width="1597" height="898" alt="img3a" src="https://github.com/user-attachments/assets/063e4c54-0751-478e-880e-a8532a164642" />
+
+<img width="1598" height="901" alt="img3" src="https://github.com/user-attachments/assets/600cd03e-0ce8-49e4-8ad8-d702cf0ef3c5" />
+
+<img width="1600" height="892" alt="img4" src="https://github.com/user-attachments/assets/d2d84bb1-3414-49ae-821f-bdf8aa9fd412" />
