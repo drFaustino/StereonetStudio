@@ -387,6 +387,18 @@
         <source>Ribaltamento Diretto</source>
         <translation>Ribaltamento Diretto</translation>
     </message>
+    <message>
+        <source>Acquisizione DTM attiva: clic sinistro per acquisire; clic destro per concludere e ripristinare la finestra.</source>
+        <translation>Acquisizione DTM attiva: clic sinistro per acquisire; clic destro per concludere e ripristinare la finestra.</translation>
+    </message>
+    <message>
+        <source>Punto DTM acquisito. Clicca un altro punto oppure clic destro per concludere.</source>
+        <translation>Punto DTM acquisito. Clicca un altro punto oppure clic destro per concludere.</translation>
+    </message>
+    <message>
+        <source>Tabella DTM e proiezione svuotate.</source>
+        <translation>Tabella DTM e proiezione svuotate.</translation>
+    </message>
 </context>
 <context>
     <name>StereonetStudioPlugin</name>
@@ -752,6 +764,189 @@
     <message>
         <source>Vector Layer (Layer di progetto)</source>
         <translation>Vector Layer (Layer di progetto)</translation>
+    </message>
+</context>
+<context>
+    <name>DTMTab</name>
+    <message>
+        <source>Acquisizione orientazione da DTM</source>
+        <translation>Acquisizione orientazione da DTM</translation>
+    </message>
+    <message>
+        <source>Clicca sulla superficie del DTM per stimare il piano locale e ottenere dip, direzione di immersione e dati topografici.</source>
+        <translation>Clicca sulla superficie del DTM per stimare il piano locale e ottenere dip, direzione di immersione e dati topografici.</translation>
+    </message>
+    <message>
+        <source>Livello 1 — Acquisizione base</source>
+        <translation>Livello 1 — Acquisizione base</translation>
+    </message>
+    <message>
+        <source>DTM:</source>
+        <translation>DTM:</translation>
+    </message>
+    <message>
+        <source> Aggiorna</source>
+        <translation> Aggiorna</translation>
+    </message>
+    <message>
+        <source>Metodo:</source>
+        <translation>Metodo:</translation>
+    </message>
+    <message>
+        <source>Piano locale — fit ai minimi quadrati</source>
+        <translation>Piano locale — fit ai minimi quadrati</translation>
+    </message>
+    <message>
+        <source>Raggio:</source>
+        <translation>Raggio:</translation>
+    </message>
+    <message>
+        <source> celle</source>
+        <translation> celle</translation>
+    </message>
+    <message>
+        <source>Formato destinazione:</source>
+        <translation>Formato destinazione:</translation>
+    </message>
+    <message>
+        <source>Dip / Direzione Immersione</source>
+        <translation>Dip / Direzione Immersione</translation>
+    </message>
+    <message>
+        <source>Set / Gruppo:</source>
+        <translation>Set / Gruppo:</translation>
+    </message>
+    <message>
+        <source> Acquisisci da DTM</source>
+        <translation> Acquisisci da DTM</translation>
+    </message>
+    <message>
+        <source>Per concludere l’acquisizione, clicca con il tasto destro sulla mappa.</source>
+        <translation>Per concludere l’acquisizione, clicca con il tasto destro sulla mappa.</translation>
+    </message>
+    <message>
+        <source>Livello 2 — Controllo qualità</source>
+        <translation>Livello 2 — Controllo qualità</translation>
+    </message>
+    <message>
+        <source> unità Z</source>
+        <translation> unità Z</translation>
+    </message>
+    <message>
+        <source>Segnala quando RMSE supera la soglia</source>
+        <translation>Segnala quando RMSE supera la soglia</translation>
+    </message>
+    <message>
+        <source>Non trasferire alla tabella Data se sopra soglia</source>
+        <translation>Non trasferire alla tabella Data se sopra soglia</translation>
+    </message>
+    <message>
+        <source>Soglia RMSE:</source>
+        <translation>Soglia RMSE:</translation>
+    </message>
+    <message>
+        <source>Qualità: nessuna acquisizione</source>
+        <translation>Qualità: nessuna acquisizione</translation>
+    </message>
+    <message>
+        <source>Livello 3 — Acquisizione multipla</source>
+        <translation>Livello 3 — Acquisizione multipla</translation>
+    </message>
+    <message>
+        <source>Mantieni lo strumento attivo dopo ogni click</source>
+        <translation>Mantieni lo strumento attivo dopo ogni click</translation>
+    </message>
+    <message>
+        <source>Misure acquisite: 0</source>
+        <translation>Misure acquisite: 0</translation>
+    </message>
+    <message>
+        <source> Esporta tabella DTM...</source>
+        <translation> Esporta tabella DTM...</translation>
+    </message>
+    <message>
+        <source> Svuota tabella</source>
+        <translation> Svuota tabella</translation>
+    </message>
+    <message>
+        <source>Nessun raster disponibile</source>
+        <translation>Nessun raster disponibile</translation>
+    </message>
+    <message>
+        <source>DTM</source>
+        <translation>DTM</translation>
+    </message>
+    <message>
+        <source>Seleziona un raster DTM valido.</source>
+        <translation>Seleziona un raster DTM valido.</translation>
+    </message>
+    <message>
+        <source>Misure acquisite: {}</source>
+        <translation>Misure acquisite: {}</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>sopra soglia</source>
+        <translation>sopra soglia</translation>
+    </message>
+    <message>
+        <source>Ultima misura: Dip {:.2f}°, Dip Direction {:.2f}°, RMSE {:.4f} — {}.</source>
+        <translation>Ultima misura: Dip {:.2f}°, Dip Direction {:.2f}°, RMSE {:.4f} — {}.</translation>
+    </message>
+    <message>
+        <source> La misura resta nella tabella DTM ma non viene trasferita in Data.</source>
+        <translation> La misura resta nella tabella DTM ma non viene trasferita in Data.</translation>
+    </message>
+    <message>
+        <source>Esporta</source>
+        <translation>Esporta</translation>
+    </message>
+    <message>
+        <source>Non ci sono misure da esportare.</source>
+        <translation>Non ci sono misure da esportare.</translation>
+    </message>
+    <message>
+        <source>Esporta tabella DTM</source>
+        <translation>Esporta tabella DTM</translation>
+    </message>
+    <message>
+        <source>CSV (*.csv);;ESRI Shapefile (*.shp);;GeoPackage (*.gpkg)</source>
+        <translation>CSV (*.csv);;ESRI Shapefile (*.shp);;GeoPackage (*.gpkg)</translation>
+    </message>
+    <message>
+        <source>Errore</source>
+        <translation>Errore</translation>
+    </message>
+    <message>
+        <source>Impossibile esportare la tabella DTM:\n{}</source>
+        <translation>Impossibile esportare la tabella DTM:\n{}</translation>
+    </message>
+    <message>
+        <source>Impossibile creare il layer vettoriale temporaneo.</source>
+        <translation>Impossibile creare il layer vettoriale temporaneo.</translation>
+    </message>
+    <message>
+        <source>Esportazione completata</source>
+        <translation>Esportazione completata</translation>
+    </message>
+    <message>
+        <source>File esportato in:\n{}\n\nVuoi caricarlo automaticamente nel progetto QGIS?</source>
+        <translation>File esportato in:\n{}\n\nVuoi caricarlo automaticamente nel progetto QGIS?</translation>
+    </message>
+    <message>
+        <source>Caricamento</source>
+        <translation>Caricamento</translation>
+    </message>
+    <message>
+        <source>Il file è stato esportato, ma non è stato possibile caricarlo nel progetto QGIS.</source>
+        <translation>Il file è stato esportato, ma non è stato possibile caricarlo nel progetto QGIS.</translation>
+    </message>
+    <message>
+        <source>Il file è stato esportato, ma il caricamento nel progetto QGIS non è riuscito:\n{}</source>
+        <translation>Il file è stato esportato, ma il caricamento nel progetto QGIS non è riuscito:\n{}</translation>
     </message>
 </context>
 </TS>

@@ -387,6 +387,18 @@
         <source>Ribaltamento Diretto</source>
         <translation>Direct Toppling</translation>
     </message>
+    <message>
+        <source>Acquisizione DTM attiva: clic sinistro per acquisire; clic destro per concludere e ripristinare la finestra.</source>
+        <translation>DTM acquisition active: left-click to acquire; right-click to finish and restore the window.</translation>
+    </message>
+    <message>
+        <source>Punto DTM acquisito. Clicca un altro punto oppure clic destro per concludere.</source>
+        <translation>DTM point acquired. Click another point or right-click to finish.</translation>
+    </message>
+    <message>
+        <source>Tabella DTM e proiezione svuotate.</source>
+        <translation>DTM table and projection cleared.</translation>
+    </message>
 </context>
 <context>
     <name>StereonetStudioPlugin</name>
@@ -752,6 +764,189 @@
     <message>
         <source>Vector Layer (Layer di progetto)</source>
         <translation>Vector Layer (Project Layer)</translation>
+    </message>
+</context>
+<context>
+    <name>DTMTab</name>
+    <message>
+        <source>Acquisizione orientazione da DTM</source>
+        <translation>DTM orientation acquisition</translation>
+    </message>
+    <message>
+        <source>Clicca sulla superficie del DTM per stimare il piano locale e ottenere dip, direzione di immersione e dati topografici.</source>
+        <translation>Click on the DTM surface to estimate the local plane and obtain dip, dip direction and topographic data.</translation>
+    </message>
+    <message>
+        <source>Livello 1 — Acquisizione base</source>
+        <translation>Level 1 — Basic acquisition</translation>
+    </message>
+    <message>
+        <source>DTM:</source>
+        <translation>DTM:</translation>
+    </message>
+    <message>
+        <source> Aggiorna</source>
+        <translation> Refresh</translation>
+    </message>
+    <message>
+        <source>Metodo:</source>
+        <translation>Method:</translation>
+    </message>
+    <message>
+        <source>Piano locale — fit ai minimi quadrati</source>
+        <translation>Local plane — least-squares fit</translation>
+    </message>
+    <message>
+        <source>Raggio:</source>
+        <translation>Radius:</translation>
+    </message>
+    <message>
+        <source> celle</source>
+        <translation> cells</translation>
+    </message>
+    <message>
+        <source>Formato destinazione:</source>
+        <translation>Target format:</translation>
+    </message>
+    <message>
+        <source>Dip / Direzione Immersione</source>
+        <translation>Dip / Dip Direction</translation>
+    </message>
+    <message>
+        <source>Set / Gruppo:</source>
+        <translation>Set / Group:</translation>
+    </message>
+    <message>
+        <source> Acquisisci da DTM</source>
+        <translation> Acquire from DTM</translation>
+    </message>
+    <message>
+        <source>Per concludere l’acquisizione, clicca con il tasto destro sulla mappa.</source>
+        <translation>To finish the acquisition, right-click on the map.</translation>
+    </message>
+    <message>
+        <source>Livello 2 — Controllo qualità</source>
+        <translation>Level 2 — Quality control</translation>
+    </message>
+    <message>
+        <source> unità Z</source>
+        <translation> Z units</translation>
+    </message>
+    <message>
+        <source>Segnala quando RMSE supera la soglia</source>
+        <translation>Warn when RMSE exceeds the threshold</translation>
+    </message>
+    <message>
+        <source>Non trasferire alla tabella Data se sopra soglia</source>
+        <translation>Do not transfer to the Data table if above the threshold</translation>
+    </message>
+    <message>
+        <source>Soglia RMSE:</source>
+        <translation>RMSE threshold:</translation>
+    </message>
+    <message>
+        <source>Qualità: nessuna acquisizione</source>
+        <translation>Quality: no acquisition</translation>
+    </message>
+    <message>
+        <source>Livello 3 — Acquisizione multipla</source>
+        <translation>Level 3 — Multiple acquisition</translation>
+    </message>
+    <message>
+        <source>Mantieni lo strumento attivo dopo ogni click</source>
+        <translation>Keep the tool active after each click</translation>
+    </message>
+    <message>
+        <source>Misure acquisite: 0</source>
+        <translation>Measurements acquired: 0</translation>
+    </message>
+    <message>
+        <source> Esporta tabella DTM...</source>
+        <translation> Export DTM table...</translation>
+    </message>
+    <message>
+        <source> Svuota tabella</source>
+        <translation> Clear table</translation>
+    </message>
+    <message>
+        <source>Nessun raster disponibile</source>
+        <translation>No raster available</translation>
+    </message>
+    <message>
+        <source>DTM</source>
+        <translation>DTM</translation>
+    </message>
+    <message>
+        <source>Seleziona un raster DTM valido.</source>
+        <translation>Select a valid DTM raster.</translation>
+    </message>
+    <message>
+        <source>Misure acquisite: {}</source>
+        <translation>Measurements acquired: {}</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>sopra soglia</source>
+        <translation>above threshold</translation>
+    </message>
+    <message>
+        <source>Ultima misura: Dip {:.2f}°, Dip Direction {:.2f}°, RMSE {:.4f} — {}.</source>
+        <translation>Last measurement: Dip {:.2f}°, Dip Direction {:.2f}°, RMSE {:.4f} — {}.</translation>
+    </message>
+    <message>
+        <source> La misura resta nella tabella DTM ma non viene trasferita in Data.</source>
+        <translation> The measurement remains in the DTM table but is not transferred to Data.</translation>
+    </message>
+    <message>
+        <source>Esporta</source>
+        <translation>Export</translation>
+    </message>
+    <message>
+        <source>Non ci sono misure da esportare.</source>
+        <translation>There are no measurements to export.</translation>
+    </message>
+    <message>
+        <source>Esporta tabella DTM</source>
+        <translation>Export DTM table</translation>
+    </message>
+    <message>
+        <source>CSV (*.csv);;ESRI Shapefile (*.shp);;GeoPackage (*.gpkg)</source>
+        <translation>CSV (*.csv);;ESRI Shapefile (*.shp);;GeoPackage (*.gpkg)</translation>
+    </message>
+    <message>
+        <source>Errore</source>
+        <translation>Error</translation>
+    </message>
+    <message>
+        <source>Impossibile esportare la tabella DTM:\n{}</source>
+        <translation>Unable to export the DTM table:\n{}</translation>
+    </message>
+    <message>
+        <source>Impossibile creare il layer vettoriale temporaneo.</source>
+        <translation>Unable to create the temporary vector layer.</translation>
+    </message>
+    <message>
+        <source>Esportazione completata</source>
+        <translation>Export completed</translation>
+    </message>
+    <message>
+        <source>File esportato in:\n{}\n\nVuoi caricarlo automaticamente nel progetto QGIS?</source>
+        <translation>File exported to:\n{}\n\nDo you want to load it automatically into the QGIS project?</translation>
+    </message>
+    <message>
+        <source>Caricamento</source>
+        <translation>Loading</translation>
+    </message>
+    <message>
+        <source>Il file è stato esportato, ma non è stato possibile caricarlo nel progetto QGIS.</source>
+        <translation>The file was exported, but it could not be loaded into the QGIS project.</translation>
+    </message>
+    <message>
+        <source>Il file è stato esportato, ma il caricamento nel progetto QGIS non è riuscito:\n{}</source>
+        <translation>The file was exported, but loading it into the QGIS project failed:\n{}</translation>
     </message>
 </context>
 </TS>

@@ -108,6 +108,10 @@ class DataTab(QWidget):
         for r in rows:
             self.table.removeRow(r)
 
+    def append_row(self, row):
+        """Aggiunge una misura gia' normalizzata nel formato corrente."""
+        self._add_row(row.get('v1', 0.0), row.get('v2', 0.0), row.get('set', 'Set 1'))
+
     def load_rows(self, data_rows, fmt=None):
         self.table.setRowCount(0)
         for row in data_rows:

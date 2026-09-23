@@ -51,7 +51,7 @@ An optional **declination correction** can also be applied to orientation data.
 
 ## User interface
 
-StereonetStudio uses a modern tabbed interface divided into four main sections:
+StereonetStudio uses a modern tabbed interface divided into five main sections:
 
 ### Stereonet
 
@@ -68,9 +68,19 @@ Main configuration panel for:
 * text sizes;
 * kinematic analysis.
 
+### DTM
+
+The DTM tab acquires a local topographic plane by clicking directly on a raster DTM/DEM in the QGIS map canvas. The acquisition workflow has three levels:
+
+1. **Basic acquisition** — DTM selection, local least-squares plane, sampling radius and the destination orientation format used by the Data tab.
+2. **Quality control** — RMSE threshold, sample count and maximum residual are reported for each local fit.
+3. **Multiple acquisition** — continuous mouse acquisition, complete structural/topographic table and CSV export.
+
+For each click the plugin stores X, Y, Z, dip, dip direction, strike, pole trend/plunge, RMSE, maximum residual, sample count, sampling radius, set/group and raster CRS. The sampling window is also highlighted on the QGIS map. The resulting orientation is converted automatically into the format selected in the **Data** tab and inserted there as the two values required by the chosen format.
+
 ### Data
 
-Displays the imported structural data and provides the interface for manual data entry and data management.
+Displays the imported structural data and provides the interface for manual data entry and data management. DTM acquisitions are inserted automatically using only the two values required by the currently selected orientation format.
 
 ### Kinematic Analysis
 
@@ -410,15 +420,21 @@ The generated figures can be exported to PNG, JPEG, SVG and PDF.
 
 Specify the project license here.
 
+
 ---
 
 ## Author
 
-Dr. Geol. Faustino Cetraro
+Dr. geol. Faustino Cetraro
 
----
+## Changelog 1.1.0 (verifica con Dips)
+- Convenzione dei poli corretta: polo verso il basso con trend = dipdir + 180 (prima Inferiore/Superiore risultavano scambiati rispetto a Dips; anche piani, media globale e intersezioni del cuneo).
+- Cono di attrito dei poli: raggio = angolo di attrito misurato dal centro; disegnato anche in emisfero Superiore.
+- Scivolamento planare: criterio con dip apparente della scarpata (daylight envelope), zona critica e limiti laterali come in Dips.
+- Scivolamento a cuneo: criterio di Markland (plunge fra attrito e dip apparente della scarpata), senza limiti laterali.
+- Densita': conteggio su sfera con cono all'1% dell'area e nucleo Fisher, in % assoluta (massimo confrontabile con "Maximum Density" di Dips), livelli tondi e scala colori tipo Dips.
+- Rosetta: dato selezionabile Strike (default, come Dips) / Direzione di immersione, filtro Dip min/max, media assiale per lo strike.
 
-## Interface
-
-<img width="1603" height="897" alt="Immagine1" src="https://github.com/user-attachments/assets/1cb24bac-ef42-408b-b41c-30fcee8bcea0" />
-
+## 1.1.1
+- Etichetta "gm" (grassetto, stesso colore) accanto alla croce Global Mean.
+- Nuova opzione "Global Best Fit" (accanto a Global Mean): polo con croce ed etichetta "bm" in grassetto e piano di miglior adattamento, in blu (colore modificabile).
