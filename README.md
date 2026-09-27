@@ -440,3 +440,13 @@ Dr. Geol. Faustino Cetraro
 - Nuova opzione "Global Best Fit" (accanto a Global Mean): polo con croce ed etichetta "bm" in grassetto e piano di miglior adattamento, in blu (colore modificabile).
 - Il pannello non altera più in alcun modo l'interfaccia principale di QGIS all'apertura: non viene più agganciato, nemmeno temporaneamente, alla finestra principale (barra di stato in basso sempre visibile, nessun ridimensionamento della finestra di QGIS) e non può più essere riagganciato trascinandolo.
 - Il pannello viene ora sempre aperto/riaperto centrato al centro dello schermo, sia alla prima apertura sia quando viene richiamato dopo essere stato nascosto o dopo un'acquisizione dati da DTM.
+
+---
+
+## Interfaces
+
+<img width="1501" height="787" alt="img1" src="https://github.com/user-attachments/assets/3d3b9ddb-c4e5-4e69-a4cf-688a599a36f0" />
+
+<img width="1500" height="784" alt="img2" src="https://github.com/user-attachments/assets/11065a10-265c-4d6e-81f7-e3d63d949424" />
+
+<img width="1499" height="777" alt="img3" src="https://github.com/user-attachments/assets/ab986c8d-0d36-41a1-b01b-21e785b3f341" />
