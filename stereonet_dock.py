@@ -22,7 +22,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import ListedColormap
 
 from qgis.PyQt.QtCore import Qt, QSize
-from qgis.PyQt.QtGui import QColor
+from qgis.PyQt.QtGui import QColor, QGuiApplication
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel,
     QFileDialog, QMessageBox, QSizePolicy, QTabWidget, QToolButton, QFrame
@@ -326,6 +326,30 @@ class StereonetDock(QDockWidget):
         if not self.isFloating():
             self.setFloating(True)
 
+    def center_on_screen(self):
+        """Centra la finestra flottante del pannello al centro dello
+        schermo. Usa lo schermo corrente del pannello se disponibile
+        (es. quando viene semplicemente riaperto), altrimenti quello della
+        finestra principale di QGIS, con lo schermo primario come ultima
+        risorsa."""
+        screen = self.screen()
+
+        if screen is None:
+            main_window = self.iface.mainWindow() if self.iface else None
+            if main_window is not None:
+                screen = main_window.screen()
+
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        self.move(frame.topLeft())
+
     def _toggle_maximize(self):
         self._ensure_floating()
 
@@ -496,6 +520,7 @@ class StereonetDock(QDockWidget):
         # Ripristina la finestra dopo il click destro e termina lo strumento.
         self.stop_dtm_acquisition(restore_panel=True)
         self.show()
+        self.center_on_screen()
         self.raise_()
         self.activateWindow()
 
