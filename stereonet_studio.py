@@ -49,14 +49,41 @@ class StereonetStudioPlugin:
         if self.dock is None:
             self.dock = StereonetDock(self.iface, self.iface.mainWindow())
             self.dock.visibilityChanged.connect(self._on_visibility_changed)
+
+            # Il pannello deve comportarsi sempre come una finestra
+            # indipendente ("floating") e non deve MAI poter essere
+            # agganciato dentro la finestra principale di QGIS: se venisse
+            # anche solo temporaneamente inserito nel layout del
+            # QMainWindow (es. in TopDockWidgetArea prima di diventare
+            # floating), QGIS ridimensiona/ricalcola la finestra principale
+            # e questo puo' far scomparire o spostare la barra di stato in
+            # basso. Per evitarlo del tutto:
+            # 1) rendiamo il dock floating PRIMA di aggiungerlo a QGIS;
+            # 2) vietiamo qualsiasi area di aggancio, cosi' non puo' essere
+            #    "riattaccato" alla finestra principale nemmeno trascinandolo.
+            self.dock.setAllowedAreas(Qt.DockWidgetArea.NoDockWidgetArea)
+            self.dock.setFloating(True)
+
             self.iface.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, self.dock)
+
+            # Qt puo' comunque ri-agganciare per un istante durante
+            # l'aggiunta: forziamo di nuovo lo stato floating subito dopo,
+            # cosi' la finestra principale di QGIS non viene mai toccata.
+            self.dock.setFloating(True)
+
             # Apri il pannello come finestra "floating" gia' dimensionata in
             # modo che sia le schede laterali sia l'area grafica (incluso il
-            # titolo sopra la proiezione) siano completamente visibili.
-            self.dock.setFloating(True)
+            # titolo sopra la proiezione) siano completamente visibili, e
+            # sempre centrata al centro dello schermo.
             self.dock.resize(1600, 900)
+            self.dock.center_on_screen()
         else:
-            self.dock.setVisible(not self.dock.isVisible())
+            will_show = not self.dock.isVisible()
+            self.dock.setVisible(will_show)
+            if will_show:
+                # Anche quando il pannello viene semplicemente riaperto
+                # (non ricreato), deve ricomparire sempre centrato.
+                self.dock.center_on_screen()
 
     def _on_visibility_changed(self, visible):
         self.action_show.setChecked(visible)
