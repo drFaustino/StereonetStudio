@@ -326,6 +326,15 @@ class StereonetTab(QWidget):
             self.tr('Global Orientation Format:'), self.cmb_format
         )
 
+        self.cmb_mean_values = QComboBox()
+        trc.populate_combo(
+            self.cmb_mean_values, self.tr, cfg.MEAN_LEGEND_VALUES
+        )
+        form.addRow(
+            self.tr('Valori Global Mean in legenda:'),
+            self.cmb_mean_values,
+        )
+
         rosette_row = QHBoxLayout()
         self.chk_rosette = QCheckBox(self.tr('Rosette Plot'))
         rosette_row.addWidget(self.chk_rosette)
@@ -515,6 +524,10 @@ class StereonetTab(QWidget):
         trc.set_combo_value(
             self.cmb_format, s['orientation_format']
         )
+        trc.set_combo_value(
+            self.cmb_mean_values,
+            s.get('mean_legend_values', 'Piano e Polo'),
+        )
         self.chk_rosette.setChecked(s['show_rosette'])
 
         self.spn_font_title.setValue(
@@ -589,6 +602,9 @@ class StereonetTab(QWidget):
         )
         s['contour_column'] = self.txt_contour_col.text().strip()
         s['orientation_format'] = trc.combo_value(self.cmb_format)
+        s['mean_legend_values'] = trc.combo_value(
+            self.cmb_mean_values
+        )
         s['show_rosette'] = self.chk_rosette.isChecked()
 
         s['font_size_title'] = self.spn_font_title.value()

@@ -33,6 +33,16 @@ DATA_SOURCE_TYPES = ['File CSV/TXT', 'Vector Layer (Layer di progetto)']
 
 ROSETTE_BIN_WIDTHS = [5, 10, 15, 30]
 
+# Valori mostrati per la Global Mean in legenda:
+# piano (DipDir/Dip), polo (Trend/Plunge), entrambi, oppure piano in
+# legenda e polo in una sottolegenda in basso.
+MEAN_LEGEND_VALUES = [
+    'Piano (DipDir/Dip)',
+    'Polo (Trend/Plunge)',
+    'Piano e Polo',
+    'Piano + sottolegenda Polo',
+]
+
 DEFAULT_SETTINGS = {
     # Input Data
     'data_source': 'File CSV/TXT',
@@ -73,6 +83,7 @@ DEFAULT_SETTINGS = {
     'contour_style': 'Filled',
     'contour_column': '',
     'orientation_format': 'Dip / Direzione Immersione',
+    'mean_legend_values': 'Piano e Polo',
     'show_rosette': False,
     'rosette_bin_width': 10,
 
