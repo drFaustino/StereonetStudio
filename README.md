@@ -427,24 +427,41 @@ Specify the project license here.
 
 Dr. Geol. Faustino Cetraro
 
-## Changelog 1.1.0 (verifica con Dips)
-- Convenzione dei poli corretta: polo verso il basso con trend = dipdir + 180 (prima Inferiore/Superiore risultavano scambiati rispetto a Dips; anche piani, media globale e intersezioni del cuneo).
-- Cono di attrito dei poli: raggio = angolo di attrito misurato dal centro; disegnato anche in emisfero Superiore.
-- Scivolamento planare: criterio con dip apparente della scarpata (daylight envelope), zona critica e limiti laterali come in Dips.
-- Scivolamento a cuneo: criterio di Markland (plunge fra attrito e dip apparente della scarpata), senza limiti laterali.
-- Densita': conteggio su sfera con cono all'1% dell'area e nucleo Fisher, in % assoluta (massimo confrontabile con "Maximum Density" di Dips), livelli tondi e scala colori tipo Dips.
-- Rosetta: dato selezionabile Strike (default, come Dips) / Direzione di immersione, filtro Dip min/max, media assiale per lo strike.
+---
 
-## 1.1.1
-- Etichetta "gm" (grassetto, stesso colore) accanto alla croce Global Mean.
-- Nuova opzione "Global Best Fit" (accanto a Global Mean): polo con croce ed etichetta "bm" in grassetto e piano di miglior adattamento, in blu (colore modificabile).
-- Il pannello non altera più in alcun modo l'interfaccia principale di QGIS all'apertura: non viene più agganciato, nemmeno temporaneamente, alla finestra principale (barra di stato in basso sempre visibile, nessun ridimensionamento della finestra di QGIS) e non può più essere riagganciato trascinandolo.
-- Il pannello viene ora sempre aperto/riaperto centrato al centro dello schermo, sia alla prima apertura sia quando viene richiamato dopo essere stato nascosto o dopo un'acquisizione dati da DTM.
+## Changelog 
 
-## 1.2.0
+### 1.1.0 (verification against Dips)
+- Pole convention fixed: downward pole with trend = dipdir + 180 (previously Lower/Upper were swapped compared to Dips; also affects planes, global mean and wedge intersections).
+- Pole friction cone: radius = friction angle measured from the center; also drawn in the Upper hemisphere.
+- Planar sliding: criterion using the apparent dip of the slope face (daylight envelope), critical zone and lateral limits as in Dips.
+- Wedge sliding: Markland criterion (plunge between friction angle and apparent dip of the slope face), without lateral limits.
+- Density: counting on the sphere with a cone covering 1% of the area and a Fisher kernel, in absolute % (maximum comparable with Dips' "Maximum Density"), round contour levels and a Dips-style color scale.
+- Rosette: selectable data Strike (default, as in Dips) / Dip direction, Dip min/max filter, axial mean for strike.
+
+### 1.1.1
+- "gm" label (bold, same color) next to the Global Mean cross.
+- New "Global Best Fit" option (next to Global Mean): pole with cross and bold "bm" label, and best-fit plane, in blue (color editable).
+- The panel no longer alters the main QGIS interface in any way when opened: it is no longer docked to the main window, not even temporarily (status bar at the bottom always visible, no resizing of the QGIS window), and it cannot be re-docked by dragging it.
+- The panel is now always opened/reopened centered on the screen, both on first opening and when it is brought back after being hidden or after a DTM data acquisition.
+
+### 1.2.0
 - New: maximum density value (%) shown below the contour scale.
 - New: "Global Mean values in legend" option (plane DipDir/Dip, pole Trend/Plunge, both, or plane in the legend and pole in a bottom sub-legend). The mean pole (e.g. 167/75) can be compared directly with DIPS.
 - New: structural symbology for DTM measurements exported to Shapefile/GeoPackage: classic red strike/dip symbol rotated by strike, with the dip value and degree sign (e.g. 45°) placed at the end of the short dip tick. The style is saved with the file (.qml for Shapefile, layer_styles for GeoPackage) and applied when the layer is loaded into the project.
 - Improved: "Global Mean" appears once in the legend, followed by one line per set (Liv1, Liv2, ...).
 - Improved: the legend no longer overlaps the stereographic grid; the stereonet is resized automatically when needed.
 - Updated IT/EN translations.
+
+---
+## Interfaces
+
+<img width="1594" height="871" alt="img1" src="https://github.com/user-attachments/assets/0700cb70-30cd-46e8-8c0e-601db82a8012" />
+
+<img width="1597" height="867" alt="img2" src="https://github.com/user-attachments/assets/3c9473ec-48a1-4f03-b9ea-9fd94bd397d8" />
+
+<img width="1597" height="869" alt="img3" src="https://github.com/user-attachments/assets/2d8cd1d5-c99e-494f-ac03-e5617048709d" />
+
+<img width="1594" height="870" alt="img4" src="https://github.com/user-attachments/assets/a6946915-2fb3-4931-b6eb-4ca617564ff7" />
+
+<img width="1596" height="874" alt="img5" src="https://github.com/user-attachments/assets/a10126b3-cf0e-4c78-b261-c5eab796789d" />
