@@ -32,6 +32,26 @@ The stereonet supports:
 
 ---
 
+## Fold analysis & interactive tools (v1.2.0)
+
+Found in the **Folds** tab.
+
+* **Pole density contours** – show or hide pole contours, with two sliders:
+  * *Transparency* fades the contour fill so poles and great circles show through.
+  * *Low-density emphasis* packs more contour levels into the low end of the scale and leaves zero density unfilled, so sparse concentrations become visible.
+  * *Pole marker fade* makes the data poles semi-transparent so the contours under them can be seen. Picked, suggested and mean markers stay solid.
+* **Suggested limb poles** – the poles of one set, or of all sets, are split into two limb populations by two-cluster axial k-means on the sphere. The mean pole of each cluster is marked **S1** / **S2**. *Use suggested limbs* computes the fold axis and axial plane straight away. The suggestions are also snap targets for manual picking.
+
+* **β fold hinge** – when *Global Best Fit* is on, the pole to the best-fit (π) girdle is plotted as **β** and its orientation is listed in the legend as plunge→trend.
+* **Axial plane from limbs** – press *Pick L1 / L2 limb poles*, then click the pole to each limb on the stereonet (snaps to the nearest pole, global mean or β). The plugin computes:
+  * fold axis = L1 ∩ L2,
+  * axial plane = plane through the fold axis bisecting the limbs, given as dip/dip direction, with the interlimb angle.
+  The two limbs have two bisecting planes, 90° apart. The steeper one is used by default, which suits upright folds. Use *Swap bisector* for recumbent or reclined folds. The alternative plane can be shown dotted.
+* **Live plane cursor** – move the cursor to a pole position: the pole and its great circle update live with a readout. **Left-click** saves the pole and plane, **right-click** exits.
+* All picks (L1, L2, fold axis, axial plane, cursor planes) are written to the **StereonetStudio picks** table layer in the project. You can also export them with *Export picks CSV*.
+
+---
+
 ## Data import
 
 Structural data can be imported from:
@@ -72,7 +92,7 @@ Main configuration panel for:
 
 Displays the imported structural data and provides the interface for manual data entry and data management.
 
-### Kinematic Analysis
+### Kinematics
 
 Displays the results of the kinematic analysis, including the number of analysed and feasible measurements.
 

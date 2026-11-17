@@ -8,6 +8,7 @@ titolo sempre interamente visibile, legenda in alto a sinistra (sotto al
 titolo) e scala di densita' subito sotto la legenda, allineata.
 """
 
+import csv
 import math
 import numpy as np
 
@@ -18,12 +19,15 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Polygon, Circle
 from matplotlib.lines import Line2D
 from matplotlib.colors import ListedColormap
+from matplotlib.ticker import FuncFormatter
 
 from qgis.PyQt.QtCore import Qt, QSize
 from qgis.PyQt.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel,
     QFileDialog, QMessageBox, QSizePolicy, QTabWidget, QToolButton, QFrame
 )
+from qgis.core import QgsProject, QgsVectorLayer, QgsFeature
+
 from . import stereonet_math as sm
 from . import icons
 from . import i18n_labels as trc
@@ -33,11 +37,16 @@ from .tab_stereonet import StereonetTab
 from .tab_data import DataTab
 from .tab_kinematic_results import KinematicResultsTab
 from .tab_rosette import RosetteTab
+from .tab_fold import FoldTab
 
 # Scala di densita' in stile Dips (grigio-azzurro -> verde -> giallo -> rosso)
 DIPS_DENSITY_COLORS = ['#e9ebf1', '#d5eaee', '#b4ece0', '#98f0c6', '#8bee9d',
                        '#82ee6c', '#c6f04f', '#ffe23f', '#ff8a1f', '#ff0000']
 DIPS_DENSITY_CMAP = ListedColormap(DIPS_DENSITY_COLORS, name='dips_density')
+# Variante per "Low-density emphasis": la fascia 0 resta trasparente e le
+# fasce basse hanno colori piu' saturi, quindi visibili.
+EMPHASIS_DENSITY_COLORS = ['#a6d8f5', '#7fd3e0', '#79e6b4', '#8bee9d', '#82ee6c',
+                           '#c6f04f', '#ffe23f', '#ffb52f', '#ff8a1f', '#ff0000']
 
 SET_COLORS = ['#1f6fb2', '#e67e22', '#27ae60', '#8e44ad', '#c0392b',
               '#16a085', '#d4ac0d', '#7f8c8d', '#2c3e50', '#e91e8c']
@@ -57,6 +66,21 @@ class StereonetDock(QDockWidget):
 
         self.settings = new_settings()
         self.data_rows = []  # [{'v1':.., 'v2':.., 'set':..}, ...]
+
+        # ---- strumenti interattivi (piega / cursore piano) ----
+        self.ax = None
+        self._pick_mode = None          # None | 'limbs' | 'live'
+        self._pending_limbs = []        # poli L1/L2 in fase di selezione
+        self.fold = None                # piega corrente {'L1','L2','group','swap','result'}
+        self.cursor_planes = []         # [{'pole': vec, 'group': str}]
+        self.pick_records = []          # archivio salvato (anche nel layer)
+        self._fold_count = 0
+        self._plane_count = 0
+        self._picks_layer_id = None
+        self._snap_targets = []         # [(x, y, vec)]
+        self._live_bg = None
+        self._live_artists = []
+        self._suggestion = None         # [(polo, n), (polo, n)] o None
 
         self._build_ui()
         self.kinematic_tab.clear_results()
@@ -90,10 +114,12 @@ class StereonetDock(QDockWidget):
         self.data_tab = DataTab()
         self.kinematic_tab = KinematicResultsTab()
         self.rosette_tab = RosetteTab()
+        self.fold_tab = FoldTab()
 
         self.tabs.addTab(self.stereonet_tab, icons.icon_compass(), self.tr('Stereonet'))
         self.tabs.addTab(self.data_tab, icons.icon_table(), self.tr('Data'))
-        self.tabs.addTab(self.kinematic_tab, icons.icon_kinematic(), self.tr('Kinematic Analysis'))
+        self.tabs.addTab(self.kinematic_tab, icons.icon_kinematic(), self.tr('Kinematics'))
+        self.tabs.addTab(self.fold_tab, icons.icon_fold(), self.tr('Folds'))
         self.tabs.addTab(self.rosette_tab, icons.icon_rosette(), self.tr(self.tr('Rosette')))
 
         self.stereonet_tab.set_from_settings(self.settings)
@@ -158,6 +184,24 @@ class StereonetDock(QDockWidget):
         self.stereonet_tab.spn_font_title.valueChanged.connect(self._on_stereonet_options_changed)
         self.stereonet_tab.spn_font_label.valueChanged.connect(self._on_stereonet_options_changed)
         self.stereonet_tab.spn_font_elements.valueChanged.connect(self._on_stereonet_options_changed)
+
+        # ---- strumenti piega / cursore piano (scheda Folds) ----
+        t = self.fold_tab
+        t.btn_pick_limbs.toggled.connect(self._on_pick_limbs_toggled)
+        t.btn_live_plane.toggled.connect(self._on_live_plane_toggled)
+        t.btn_swap_axial.clicked.connect(self._on_swap_axial)
+        t.chk_show_alt_axial.toggled.connect(lambda *_: self.redraw())
+        t.btn_clear_picks.clicked.connect(self._on_clear_picks)
+        t.btn_export_picks.clicked.connect(self._export_picks_csv)
+        t.display_changed.connect(self.redraw)
+        t.btn_use_suggest.clicked.connect(self._on_use_suggestion)
+        t.chk_contours.toggled.connect(self._on_fold_contours_toggled)
+        self.stereonet_tab.cmb_contours.currentIndexChanged.connect(self._sync_fold_contour_checkbox)
+        self._sync_fold_contour_checkbox()
+        self.canvas.mpl_connect('draw_event', self._on_canvas_draw)
+        self.canvas.mpl_connect('motion_notify_event', self._on_canvas_motion)
+        self.canvas.mpl_connect('button_press_event', self._on_canvas_click)
+        self.canvas.mpl_connect('figure_leave_event', self._on_canvas_leave)
 
     # ------------------------------------------------------------------
     # Barra del titolo personalizzata
@@ -332,6 +376,10 @@ class StereonetDock(QDockWidget):
         ax.set_ylim(-1.30, 1.30)
         ax.set_aspect('equal')
         ax.axis('off')
+        self.ax = ax
+        self._snap_targets = []
+        self._live_artists = []
+        self._live_bg = None
 
         projection = s['projection']
         hemisphere = s['hemisphere']
@@ -405,12 +453,15 @@ class StereonetDock(QDockWidget):
                 x, y = sm.project_vector(v, projection, hemisphere)
                 if np.isfinite(x) and np.isfinite(y):
                     xs.append(x); ys.append(y)
+                    self._snap_targets.append((x, y, v))
             if xs:
+                pole_alpha = max(0.05, 1.0 - self.fold_tab.sld_pole_fade.value() / 100.0)
                 ax.scatter(xs, ys, s=22, facecolor=pole_color, edgecolor='black', linewidth=0.45,
-                           zorder=6)
+                           alpha=pole_alpha, zorder=6)
                 legend_handles.append(Line2D([0], [0], marker='o', color='none',
                                               markerfacecolor=pole_color, markeredgecolor='black',
-                                              markersize=6.5, label=self.tr('Poli')))
+                                              markersize=6.5, alpha=max(pole_alpha, 0.3),
+                                              label=self.tr('Poli')))
 
         # ---- media globale (Global Mean) ----
         if s['show_global_mean'] and planes:
@@ -421,6 +472,7 @@ class StereonetDock(QDockWidget):
                     continue
                 r_ratio = sm.resultant_length_ratio(vecs)
                 mx, my = sm.project_vector(mean_v, projection, hemisphere)
+                self._snap_targets.append((mx, my, mean_v))
                 ax.scatter([mx], [my], marker='+', s=110, color=s.get('color_global_mean', '#1b5e20'),
                            linewidth=2.0, zorder=6)
                 ax.annotate('gm', (mx, my), xytext=(5, -11), textcoords='offset points',
@@ -444,16 +496,29 @@ class StereonetDock(QDockWidget):
                 if bf_v is None:
                     continue
                 bx, by = sm.project_vector(bf_v, projection, hemisphere)
+                self._snap_targets.append((bx, by, bf_v))
                 ax.scatter([bx], [by], marker='+', s=110, color=bf_color, linewidth=2.0, zorder=6)
-                ax.annotate('bm', (bx, by), xytext=(5, -11), textcoords='offset points',
+                ax.annotate('β', (bx, by), xytext=(5, -11), textcoords='offset points',
                             color=bf_color, fontsize=font_elements_bm(s), fontweight='bold', zorder=7)
                 bf_dipdir, bf_dip = sm.plane_from_pole(bf_v)
                 bgx, bgy = sm.project_points_masked(sm.great_circle_of_plane(bf_dipdir, bf_dip, n_pts=361),
                                                     projection, hemisphere)
                 ax.plot(bgx, bgy, color=bf_color, linewidth=1.6, zorder=4)
-                legend_handles.append(Line2D([0], [0], marker='+', color=bf_color, markersize=10, linewidth=1.6,
-                                              label=self.tr('Global Best Fit ({set}: {dipdir:.0f}/{dip:.0f})').format(
-                                                  set=set_name, dipdir=bf_dipdir, dip=bf_dip)))
+                legend_handles.append(Line2D([0], [0], color=bf_color, linewidth=1.6,
+                                              label=self.tr('Best Fit girdle ({set}): dip/dd {pl}').format(
+                                                  set=set_name, pl=sm.fmt_plane(bf_dipdir, bf_dip))))
+                legend_handles.append(Line2D([0], [0], marker='+', color=bf_color, markersize=10, linewidth=0,
+                                              markeredgewidth=2.0,
+                                              label=self.tr('β fold hinge ({set}): {ln}').format(
+                                                  set=set_name, ln=sm.fmt_line(bf_v))))
+
+        # ---- poli dei fianchi suggeriti automaticamente ----
+        self.fold_tab.set_available_sets(set_names)
+        self._update_suggestion(planes, pole_vectors_by_set)
+        self._draw_suggestion(ax, s, projection, hemisphere, legend_handles)
+
+        # ---- piega (L1/L2, asse, piano assiale) e piani salvati col cursore ----
+        self._draw_fold_and_picks(ax, s, projection, hemisphere, legend_handles)
 
         # ---- analisi cinematica ----
         kin_result = None
@@ -499,6 +564,8 @@ class StereonetDock(QDockWidget):
         suptitle = fig.suptitle(title_text, fontsize=font_title, fontweight='bold',
                                  y=0.985, color='#45505c')
         self._fit_title_to_width(fig, suptitle, font_title)
+
+        self._create_live_artists(ax, s)
 
         self.rosette_tab.redraw(planes)
         self.canvas.draw_idle()
@@ -593,12 +660,21 @@ class StereonetDock(QDockWidget):
         X, Y, Z = grid
         # Densita' assoluta (% dei poli per 1% di area), come "Density
         # Concentrations" di Dips, con livelli 'tondi' (es. 0-2.5-...-25).
-        levels = sm.nice_density_levels(float(np.nanmax(Z)), n_intervals=10)
+        emphasis = self.fold_tab.sld_emphasis.value() / 100.0
+        alpha = max(0.0, min(1.0, 1.0 - self.fold_tab.sld_transparency.value() / 100.0))
+        if emphasis > 0:
+            # 11 livelli -> si scarta la fascia [0, l1] (resta non colorata)
+            levels = sm.emphasized_density_levels(float(np.nanmax(Z)), emphasis, n_intervals=10)[1:]
+            cmap = ListedColormap(EMPHASIS_DENSITY_COLORS[-(len(levels) - 1):], name='dips_emph')
+        else:
+            levels = sm.nice_density_levels(float(np.nanmax(Z)), n_intervals=10)
+            cmap = DIPS_DENSITY_CMAP
         self.last_density_max = float(np.nanmax(Z))
         if s.get('contour_style', 'Filled') == 'Line':
-            cf = ax.contour(X, Y, Z, levels=levels, cmap=DIPS_DENSITY_CMAP, linewidths=1.0, zorder=2)
+            cf = ax.contour(X, Y, Z, levels=levels, cmap=cmap, linewidths=1.0,
+                            alpha=max(alpha, 0.05), zorder=2)
         else:
-            cf = ax.contourf(X, Y, Z, levels=levels, cmap=DIPS_DENSITY_CMAP, alpha=0.85, zorder=2)
+            cf = ax.contourf(X, Y, Z, levels=levels, cmap=cmap, alpha=alpha, zorder=2)
 
         # Ritaglia il riempimento esattamente sul contorno del grande cerchio,
         # cosi' lo sfondo colorato arriva fino al bordo senza lasciare una
@@ -656,6 +732,7 @@ class StereonetDock(QDockWidget):
         cbar.ax.tick_params(
             labelsize=font_elements
         )
+        cbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _pos: '{:g}'.format(v)))
 
         for tick_lbl in cbar.ax.get_yticklabels():
             tick_lbl.set_fontweight('bold')
@@ -813,3 +890,488 @@ class StereonetDock(QDockWidget):
                                                   label=self.tr('Critical Poles (n={})').format(len(xs_ok))))
 
         return result
+
+    # ==================================================================
+    # Analisi della piega e strumenti interattivi
+    # ==================================================================
+    FOLD_L_COLOR = '#c0392b'
+    FOLD_AXIS_COLOR = '#6a1b9a'
+    FOLD_AP_COLOR = '#d35400'
+    CURSOR_COLOR = '#e0007a'
+    SNAP_TOL = 0.06          # tolleranza di aggancio (unita' del disco)
+    MAX_PLANE_LEGEND = 6
+
+    def _draw_fold_and_picks(self, ax, s, projection, hemisphere, legend_handles):
+        fs = font_elements_bm(s)
+
+        def gc(pole_v, **kw):
+            dd, dp = sm.plane_from_pole(pole_v)
+            gx, gy = sm.project_points_masked(sm.great_circle_of_plane(dd, dp, n_pts=361),
+                                              projection, hemisphere)
+            ax.plot(gx, gy, **kw)
+            return dd, dp
+
+        def marker(v, label, **kw):
+            x, y = sm.project_vector(v, projection, hemisphere)
+            ax.plot([x], [y], linestyle='none', zorder=8, **kw)
+            if label:
+                ax.annotate(label, (x, y), xytext=(6, 5), textcoords='offset points',
+                            color=kw.get('markeredgecolor', '#000000'), fontsize=fs,
+                            fontweight='bold', zorder=8)
+
+        # ---- poli dei fianchi (anche durante la selezione) ----
+        limbs = self.fold['limbs'] if self.fold else self._pending_limbs
+        for i, v in enumerate(limbs):
+            name = 'L{}'.format(i + 1)
+            marker(v, name, marker='s', markersize=7, markerfacecolor='#ffffff',
+                   markeredgecolor=self.FOLD_L_COLOR, markeredgewidth=2.0)
+            dd, dp = gc(v, color=self.FOLD_L_COLOR, linewidth=1.1, linestyle='--', zorder=5)
+            legend_handles.append(Line2D(
+                [0], [0], marker='s', color=self.FOLD_L_COLOR, linestyle='--', linewidth=1.1,
+                markerfacecolor='#ffffff', markeredgewidth=2.0, markersize=6,
+                label=self.tr('{n} limb: dip/dd {pl}, pole {ln}').format(
+                    n=name, pl=sm.fmt_plane(dd, dp), ln=sm.fmt_line(v))))
+
+        # ---- asse di piega e piano assiale ----
+        if self.fold and self.fold.get('result'):
+            r = self.fold['result']
+            if self.fold_tab.chk_show_alt_axial.isChecked():
+                gc(r['alt_pole'], color=self.FOLD_AP_COLOR, linewidth=1.0, linestyle=':', zorder=5)
+                legend_handles.append(Line2D(
+                    [0], [0], color=self.FOLD_AP_COLOR, linewidth=1.0, linestyle=':',
+                    label=self.tr('Alt. axial plane: dip/dd {pl} (interlimb {il:.0f}°)').format(
+                        pl=sm.fmt_plane(r['alt_dipdir'], r['alt_dip']), il=r['alt_interlimb'])))
+            gc(r['axial_pole'], color=self.FOLD_AP_COLOR, linewidth=2.2, linestyle='-.', zorder=5)
+            legend_handles.append(Line2D(
+                [0], [0], color=self.FOLD_AP_COLOR, linewidth=2.2, linestyle='-.',
+                label=self.tr('Axial plane: dip/dd {pl} (interlimb {il:.0f}°)').format(
+                    pl=sm.fmt_plane(r['axial_dipdir'], r['axial_dip']), il=r['interlimb'])))
+            marker(r['axis'], self.tr('FA'), marker='*', markersize=13,
+                   markerfacecolor=self.FOLD_AXIS_COLOR, markeredgecolor=self.FOLD_AXIS_COLOR)
+            legend_handles.append(Line2D(
+                [0], [0], marker='*', color='none', markerfacecolor=self.FOLD_AXIS_COLOR,
+                markeredgecolor=self.FOLD_AXIS_COLOR, markersize=10,
+                label=self.tr('Fold axis (L1∩L2): {ln}').format(ln=sm.fmt_line(r['axis']))))
+
+        # ---- piani salvati con il cursore ----
+        for i, cp in enumerate(self.cursor_planes):
+            dd, dp = gc(cp['pole'], color=self.CURSOR_COLOR, linewidth=1.3, zorder=5)
+            marker(cp['pole'], cp['group'], marker='o', markersize=6,
+                   markerfacecolor=self.CURSOR_COLOR, markeredgecolor='#000000', markeredgewidth=0.5)
+            if i < self.MAX_PLANE_LEGEND:
+                legend_handles.append(Line2D(
+                    [0], [0], marker='o', color=self.CURSOR_COLOR, linewidth=1.3,
+                    markerfacecolor=self.CURSOR_COLOR, markeredgecolor='#000000', markersize=5,
+                    label=self.tr('{g}: dip/dd {pl}, pole {ln}').format(
+                        g=cp['group'], pl=sm.fmt_plane(dd, dp), ln=sm.fmt_line(cp['pole']))))
+        extra = len(self.cursor_planes) - self.MAX_PLANE_LEGEND
+        if extra > 0:
+            legend_handles.append(Line2D([0], [0], color='none',
+                                         label=self.tr('… +{} more saved planes').format(extra)))
+
+    # ------------------------------------------------------------------
+    # Artisti "animati" per l'aggiornamento live (blitting)
+    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Suggerimento automatico dei poli dei fianchi
+    # ------------------------------------------------------------------
+    SUGGEST_COLOR = '#00897b'
+
+    def _update_suggestion(self, planes, pole_vectors_by_set):
+        sel = self.fold_tab.suggest_set()
+        if sel and sel in pole_vectors_by_set:
+            vecs = pole_vectors_by_set[sel]
+        else:
+            vecs = [v for vs in pole_vectors_by_set.values() for v in vs]
+        self._suggestion = sm.suggest_limb_poles(vecs) if planes else None
+        lbl = self.fold_tab.lbl_suggest
+        self.fold_tab.btn_use_suggest.setEnabled(self._suggestion is not None)
+        if self._suggestion is None:
+            lbl.setText(self.tr('No suggestion (need ≥ 4 poles forming two distinct groups).'))
+            return
+        parts = []
+        for i, (v, n) in enumerate(self._suggestion):
+            dd, dp = sm.plane_from_pole(v)
+            parts.append(self.tr('S{i}: pole {ln} → limb dip/dd {pl}  (n={n})').format(
+                i=i + 1, ln=sm.fmt_line(v), pl=sm.fmt_plane(dd, dp), n=n))
+        r = sm.fold_from_limbs(self._suggestion[0][0], self._suggestion[1][0])
+        if r is not None:
+            parts.append(self.tr('→ fold axis {ax}, axial plane dip/dd {ap}').format(
+                ax=sm.fmt_line(r['axis']), ap=sm.fmt_plane(r['axial_dipdir'], r['axial_dip'])))
+        lbl.setText('\n'.join(parts))
+
+    def _draw_suggestion(self, ax, s, projection, hemisphere, legend_handles):
+        if self._suggestion is None:
+            return
+        show = self.fold_tab.chk_show_suggest.isChecked()
+        for i, (v, n) in enumerate(self._suggestion):
+            x, y = sm.project_vector(v, projection, hemisphere)
+            self._snap_targets.append((x, y, v))
+            if not show:
+                continue
+            ax.plot([x], [y], marker='D', markersize=10, markerfacecolor='none',
+                    markeredgecolor=self.SUGGEST_COLOR, markeredgewidth=2.0,
+                    linestyle='none', zorder=7.5)
+            ax.annotate('S{}'.format(i + 1), (x, y), xytext=(7, -12), textcoords='offset points',
+                        color=self.SUGGEST_COLOR, fontsize=font_elements_bm(s), fontweight='bold',
+                        zorder=7.5)
+        if show:
+            legend_handles.append(Line2D(
+                [0], [0], marker='D', color='none', markerfacecolor='none',
+                markeredgecolor=self.SUGGEST_COLOR, markeredgewidth=2.0, markersize=7,
+                label=self.tr('Suggested limb poles: S1 {a}, S2 {b}').format(
+                    a=sm.fmt_line(self._suggestion[0][0]), b=sm.fmt_line(self._suggestion[1][0]))))
+
+    def _on_use_suggestion(self):
+        if self._suggestion is None:
+            return
+        self._exit_modes()
+        self._pending_limbs = [self._suggestion[0][0], self._suggestion[1][0]]
+        self._complete_fold()
+
+    # ------------------------------------------------------------------
+    # Contorni: casella "Show pole density contours" nella scheda Folds
+    # ------------------------------------------------------------------
+    def _on_fold_contours_toggled(self, on):
+        cmb = self.stereonet_tab.cmb_contours
+        current = trc.combo_value(cmb)
+        if on and current == 'Nessuno':
+            trc.set_combo_value(cmb, 'Poli (Vettori)')
+        elif not on and current != 'Nessuno':
+            trc.set_combo_value(cmb, 'Nessuno')
+        self._on_stereonet_options_changed()
+
+    def _sync_fold_contour_checkbox(self, *args):
+        chk = self.fold_tab.chk_contours
+        chk.blockSignals(True)
+        chk.setChecked(trc.combo_value(self.stereonet_tab.cmb_contours) != 'Nessuno')
+        chk.blockSignals(False)
+
+    def _create_live_artists(self, ax, s):
+        line, = ax.plot([], [], color=self.CURSOR_COLOR, linewidth=1.8, zorder=9, animated=True)
+        pt, = ax.plot([], [], marker='o', markersize=8, markerfacecolor='none',
+                      markeredgecolor=self.CURSOR_COLOR, markeredgewidth=2.0,
+                      linestyle='none', zorder=9, animated=True)
+        snap, = ax.plot([], [], marker='o', markersize=13, markerfacecolor='none',
+                        markeredgecolor='#ff9800', markeredgewidth=2.0,
+                        linestyle='none', zorder=9, animated=True)
+        txt = ax.text(-1.28, -1.28, '', ha='left', va='bottom', zorder=10, animated=True,
+                      fontsize=font_elements_bm(s), fontweight='bold', color='#222222',
+                      bbox=dict(boxstyle='round,pad=0.35', facecolor='#ffffff',
+                                edgecolor=self.CURSOR_COLOR, alpha=0.95))
+        txt.set_visible(False)
+        self._live_line, self._live_pt, self._live_snap, self._live_txt = line, pt, snap, txt
+        self._live_artists = [line, pt, snap, txt]
+
+    def _on_canvas_draw(self, event):
+        try:
+            self._live_bg = self.canvas.copy_from_bbox(self.figure.bbox)
+        except Exception:
+            self._live_bg = None
+        for a in self._live_artists:
+            try:
+                a.axes.draw_artist(a)
+            except Exception:
+                pass
+
+    def _blit_live(self):
+        if not self._live_artists:
+            return
+        if self._live_bg is None:
+            self.canvas.draw_idle()
+            return
+        self.canvas.restore_region(self._live_bg)
+        for a in self._live_artists:
+            a.axes.draw_artist(a)
+        self.canvas.blit(self.figure.bbox)
+
+    def _hide_live(self):
+        if not self._live_artists:
+            return
+        self._live_line.set_data([], [])
+        self._live_pt.set_data([], [])
+        self._live_snap.set_data([], [])
+        self._live_txt.set_visible(False)
+        self._blit_live()
+
+    # ------------------------------------------------------------------
+    # Modalita'
+    # ------------------------------------------------------------------
+    def _on_pick_limbs_toggled(self, on):
+        t = self.fold_tab
+        if on:
+            if t.btn_live_plane.isChecked():
+                t.btn_live_plane.setChecked(False)
+            self._pick_mode = 'limbs'
+            self._pending_limbs = []
+            self.canvas.setCursor(Qt.CursorShape.CrossCursor)
+            self.lbl_status.setText(self.tr('Click the pole to limb L1 (right-click to cancel).'))
+        else:
+            if self._pick_mode == 'limbs':
+                self._pick_mode = None
+                self.canvas.unsetCursor()
+                if self._pending_limbs:      # uscita prima di aver scelto L2
+                    self._pending_limbs = []
+                    self.lbl_status.setText(self.tr('Limb picking cancelled.'))
+                self._hide_live()
+                self.redraw()
+
+    def _on_live_plane_toggled(self, on):
+        t = self.fold_tab
+        if on:
+            if t.btn_pick_limbs.isChecked():
+                t.btn_pick_limbs.setChecked(False)
+            self._pick_mode = 'live'
+            self.canvas.setCursor(Qt.CursorShape.CrossCursor)
+            self.lbl_status.setText(self.tr(
+                'Live plane cursor: move to a pole position, left-click to save, right-click to exit.'))
+        else:
+            if self._pick_mode == 'live':
+                self._pick_mode = None
+                self.canvas.unsetCursor()
+                self._hide_live()
+                self.lbl_status.setText(self.tr('Live plane cursor off.'))
+
+    def _exit_modes(self):
+        t = self.fold_tab
+        t.btn_pick_limbs.setChecked(False)
+        t.btn_live_plane.setChecked(False)
+
+    # ------------------------------------------------------------------
+    # Eventi del mouse
+    # ------------------------------------------------------------------
+    def _event_vector(self, event, allow_snap):
+        """Vettore 3D (polo) sotto il cursore, con eventuale aggancio.
+        Ritorna (vec, snapped_xy) o (None, None)."""
+        if self.ax is None or event.inaxes is not self.ax or event.xdata is None:
+            return None, None
+        x, y = event.xdata, event.ydata
+        if allow_snap and self.fold_tab.chk_snap.isChecked() and self._snap_targets:
+            best = min(self._snap_targets, key=lambda t: (t[0] - x) ** 2 + (t[1] - y) ** 2)
+            if math.hypot(best[0] - x, best[1] - y) <= self.SNAP_TOL:
+                return sm.lower_vector(best[2]), (best[0], best[1])
+        v = sm.inverse_project(x, y, self.settings['projection'], self.settings['hemisphere'])
+        if v is None:
+            return None, None
+        return sm.lower_vector(v), None
+
+    def _on_canvas_leave(self, event):
+        if self._pick_mode:
+            self._hide_live()
+
+    def _on_canvas_motion(self, event):
+        if self._pick_mode is None or not self._live_artists:
+            return
+        v, snapped = self._event_vector(event, allow_snap=(self._pick_mode == 'limbs'))
+        if v is None:
+            self._hide_live()
+            return
+        s = self.settings
+        dd, dp = sm.plane_from_pole(v)
+        pole_txt = sm.fmt_line(v)
+        plane_txt = sm.fmt_plane(dd, dp)
+        x, y = sm.project_vector(v, s['projection'], s['hemisphere'])
+
+        if self._pick_mode == 'live':
+            gx, gy = sm.project_points_masked(sm.great_circle_of_plane(dd, dp, n_pts=361),
+                                              s['projection'], s['hemisphere'])
+            self._live_line.set_data(gx, gy)
+            self._live_pt.set_data([x], [y])
+            self._live_snap.set_data([], [])
+            self._live_txt.set_text(self.tr('Pole  {p}\nPlane dip/dd  {pl}').format(p=pole_txt, pl=plane_txt))
+            self.fold_tab.lbl_live.setText(
+                self.tr('Pole: {p}   Plane (dip/dd): {pl}').format(p=pole_txt, pl=plane_txt))
+        else:  # limbs
+            self._live_line.set_data([], [])
+            self._live_pt.set_data([x], [y])
+            self._live_snap.set_data(([snapped[0]], [snapped[1]]) if snapped else ([], []))
+            n = len(self._pending_limbs) + 1
+            self._live_txt.set_text(self.tr('L{n} pole  {p}\nlimb dip/dd  {pl}{snap}').format(
+                n=n, p=pole_txt, pl=plane_txt, snap=self.tr('  [snap]') if snapped else ''))
+        self._live_txt.set_visible(True)
+        self._blit_live()
+
+    def _on_canvas_click(self, event):
+        if self._pick_mode is None:
+            return
+        if event.button == 3:     # tasto destro: esci
+            self._exit_modes()
+            return
+        if event.button != 1:
+            return
+        v, _snapped = self._event_vector(event, allow_snap=(self._pick_mode == 'limbs'))
+        if v is None:
+            return
+
+        if self._pick_mode == 'limbs':
+            if not self._pending_limbs:
+                self.fold = None      # una nuova selezione sostituisce la piega a video
+            self._pending_limbs.append(v)
+            if len(self._pending_limbs) == 1:
+                self.lbl_status.setText(self.tr('L1 picked. Click the pole to limb L2.'))
+                self.redraw()
+                return
+            self._complete_fold()
+        else:  # live
+            self._plane_count += 1
+            group = self.tr('P{}').format(self._plane_count)
+            self.cursor_planes.append({'pole': v, 'group': group})
+            dd, dp = sm.plane_from_pole(v)
+            t, pl = sm.line_trend_plunge(v)
+            self.pick_records.append(self._record(group, 'Plane (cursor)', dd, dp, t, pl, None, None))
+            self._sync_picks_layer()
+            self.lbl_status.setText(self.tr('{g} saved: plane dip/dd {pl}, pole {ln}.').format(
+                g=group, pl=sm.fmt_plane(dd, dp), ln=sm.fmt_line(v)))
+            self.redraw()
+
+    # ------------------------------------------------------------------
+    def _complete_fold(self):
+        l1, l2 = self._pending_limbs[:2]
+        self._pending_limbs = []
+        result = sm.fold_from_limbs(l1, l2, swap=False)
+        if result is None:
+            QMessageBox.warning(self, self.tr('Fold analysis'),
+                                self.tr('L1 and L2 are (almost) parallel: no fold axis can be defined.'))
+            self.fold = None
+            self.fold_tab.btn_pick_limbs.setChecked(False)
+            self.redraw()
+            return
+        self._fold_count += 1
+        self.fold = {'limbs': [l1, l2], 'group': self.tr('Fold {}').format(self._fold_count),
+                     'swap': False, 'result': result}
+        self._store_fold_records()
+        self._update_fold_label()
+        self.lbl_status.setText(self.tr('{g}: axial plane computed and saved.').format(g=self.fold['group']))
+        if self.fold_tab.btn_pick_limbs.isChecked():
+            self.fold_tab.btn_pick_limbs.setChecked(False)   # esce dalla modalita' e ridisegna
+        else:
+            self.redraw()
+
+    def _on_swap_axial(self):
+        if not self.fold:
+            return
+        self.fold['swap'] = not self.fold['swap']
+        self.fold['result'] = sm.fold_from_limbs(*self.fold['limbs'], swap=self.fold['swap'])
+        self._store_fold_records()
+        self._update_fold_label()
+        self.redraw()
+
+    def _update_fold_label(self):
+        lbl = self.fold_tab.lbl_fold_result
+        if not self.fold or not self.fold.get('result'):
+            lbl.setText(self.tr('No fold defined.'))
+            return
+        r = self.fold['result']
+        l1, l2 = self.fold['limbs']
+        d1, p1 = sm.plane_from_pole(l1)
+        d2, p2 = sm.plane_from_pole(l2)
+        lbl.setText(self.tr(
+            '<b>{g}</b><br>'
+            'L1 limb: dip/dd {l1} (pole {pl1})<br>'
+            'L2 limb: dip/dd {l2} (pole {pl2})<br>'
+            'Fold axis (L1∩L2): <b>{ax}</b><br>'
+            'Axial plane: <b>dip/dd {ap}</b> — interlimb {il:.0f}°<br>'
+            'Alternate: dip/dd {alt} — interlimb {ail:.0f}°').format(
+                g=self.fold['group'],
+                l1=sm.fmt_plane(d1, p1), pl1=sm.fmt_line(l1),
+                l2=sm.fmt_plane(d2, p2), pl2=sm.fmt_line(l2),
+                ax=sm.fmt_line(r['axis']),
+                ap=sm.fmt_plane(r['axial_dipdir'], r['axial_dip']), il=r['interlimb'],
+                alt=sm.fmt_plane(r['alt_dipdir'], r['alt_dip']), ail=r['alt_interlimb']))
+
+    def _on_clear_picks(self):
+        self._exit_modes()
+        self._pending_limbs = []
+        self.fold = None
+        self.cursor_planes = []
+        self._update_fold_label()
+        self.fold_tab.lbl_live.setText(self.tr('Pole: –   Plane: –'))
+        self.lbl_status.setText(self.tr('Picks cleared from the plot (still stored in the picks layer).'))
+        self.redraw()
+
+    # ------------------------------------------------------------------
+    # Archivio delle selezioni: layer tabellare di progetto + CSV
+    # ------------------------------------------------------------------
+    PICK_FIELDS = ['group', 'type', 'dip', 'dipdir', 'pole_trend', 'pole_plunge',
+                   'line_trend', 'line_plunge', 'note']
+
+    @staticmethod
+    def _record(group, typ, dipdir, dip, pole_trend, pole_plunge, line_trend, line_plunge, note=''):
+        r2 = lambda v: None if v is None else round(float(v), 1)
+        return {'group': group, 'type': typ, 'dip': r2(dip), 'dipdir': r2(dipdir),
+                'pole_trend': r2(pole_trend), 'pole_plunge': r2(pole_plunge),
+                'line_trend': r2(line_trend), 'line_plunge': r2(line_plunge), 'note': note or ''}
+
+    def _store_fold_records(self):
+        g = self.fold['group']
+        r = self.fold['result']
+        self.pick_records = [rec for rec in self.pick_records if rec['group'] != g]
+        for name, v in zip(('L1 limb', 'L2 limb'), self.fold['limbs']):
+            dd, dp = sm.plane_from_pole(v)
+            t, pl = sm.line_trend_plunge(v)
+            self.pick_records.append(self._record(g, name, dd, dp, t, pl, None, None))
+        at, apl = sm.line_trend_plunge(r['axis'])
+        self.pick_records.append(self._record(g, 'Fold axis (L1∩L2)', None, None, None, None, at, apl))
+        pt, ppl = sm.line_trend_plunge(r['axial_pole'])
+        self.pick_records.append(self._record(
+            g, 'Axial plane', r['axial_dipdir'], r['axial_dip'], pt, ppl, None, None,
+            'interlimb {:.0f}; alt. axial plane {} (interlimb {:.0f})'.format(
+                r['interlimb'], sm.fmt_plane(r['alt_dipdir'], r['alt_dip']), r['alt_interlimb'])))
+        self._sync_picks_layer()
+
+    def _picks_layer(self):
+        project = QgsProject.instance()
+        layer = project.mapLayer(self._picks_layer_id) if self._picks_layer_id else None
+        if layer is None:
+            uri = ('None?field=group:string(30)&field=type:string(40)'
+                   '&field=dip:double&field=dipdir:double'
+                   '&field=pole_trend:double&field=pole_plunge:double'
+                   '&field=line_trend:double&field=line_plunge:double'
+                   '&field=note:string(160)')
+            layer = QgsVectorLayer(uri, 'StereonetStudio picks', 'memory')
+            if not layer.isValid():
+                return None
+            project.addMapLayer(layer)
+            self._picks_layer_id = layer.id()
+        return layer
+
+    def _sync_picks_layer(self):
+        """Riscrive il layer tabellare con l'archivio corrente."""
+        try:
+            layer = self._picks_layer()
+            if layer is None:
+                return
+            pr = layer.dataProvider()
+            ids = [f.id() for f in layer.getFeatures()]
+            if ids:
+                pr.deleteFeatures(ids)
+            feats = []
+            for rec in self.pick_records:
+                f = QgsFeature(layer.fields())
+                f.setAttributes([rec[k] for k in self.PICK_FIELDS])
+                feats.append(f)
+            pr.addFeatures(feats)
+            layer.triggerRepaint()
+            layer.reload()
+        except Exception as exc:  # il salvataggio non deve bloccare il disegno
+            self.lbl_status.setText(self.tr('Could not update picks layer: {}').format(exc))
+
+    def _export_picks_csv(self):
+        if not self.pick_records:
+            QMessageBox.information(self, self.tr('Export picks'), self.tr('No picks saved yet.'))
+            return
+        path, _ = QFileDialog.getSaveFileName(self, self.tr('Export picks'), 'stereonet_picks.csv',
+                                              self.tr('CSV (*.csv)'))
+        if not path:
+            return
+        if not path.lower().endswith('.csv'):
+            path += '.csv'
+        try:
+            with open(path, 'w', newline='', encoding='utf-8') as f:
+                w = csv.DictWriter(f, fieldnames=self.PICK_FIELDS)
+                w.writeheader()
+                for rec in self.pick_records:
+                    w.writerow({k: ('' if rec[k] is None else rec[k]) for k in self.PICK_FIELDS})
+            self.lbl_status.setText(self.tr('{} picks exported to {}').format(len(self.pick_records), path))
+        except Exception as exc:
+            QMessageBox.warning(self, self.tr('Error'), self.tr('Could not write file:\n{}').format(exc))

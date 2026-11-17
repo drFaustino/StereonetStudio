@@ -336,6 +336,136 @@ def best_fit_pole_vector(pole_vectors):
     return normalize(v)
 
 
+def lower_vector(v):
+    """Restituisce il vettore unitario orientato verso il basso (d >= 0)."""
+    v = normalize(np.asarray(v, dtype=float))
+    return -v if v[2] < 0 else v
+
+
+def line_trend_plunge(v):
+    """Trend/plunge (gradi) di una retta, riferita all'emisfero inferiore."""
+    return vector_to_trend_plunge(lower_vector(v))
+
+
+def fmt_line(v):
+    """Formato 'plunge -> trend' (es. '12→245') per una retta/polo."""
+    trend, plunge = line_trend_plunge(v)
+    return '{:02.0f}→{:03.0f}'.format(plunge, trend % 360.0)
+
+
+def fmt_plane(dipdir, dip):
+    """Formato 'dip/dip direction' (es. '35/120')."""
+    return '{:02.0f}/{:03.0f}'.format(dip, dipdir % 360.0)
+
+
+def fold_from_limbs(p1, p2, swap=False):
+    """Geometria di una piega a partire dai poli dei due fianchi (L1, L2).
+
+    * Asse di piega = intersezione dei due fianchi = p1 x p2.
+    * Il polo del piano assiale giace nel piano di profilo (span(p1, p2)) ed
+      e' una delle due bisettrici dei poli: (p1+p2) o (p1-p2). Le due
+      soluzioni distano 90 gradi; quale sia quella corretta (bisettrice
+      dell'angolo di interlimbo) non e' determinabile dai soli poli.
+      Per default si sceglie il piano assiale piu' RIPIDO (pieghe diritte);
+      swap=True seleziona l'altra soluzione.
+    * Angolo di interlimbo = 2 * angolo fra fianco e piano assiale.
+
+    Ritorna un dict o None se i fianchi sono (quasi) paralleli."""
+    p1 = lower_vector(p1)
+    p2 = lower_vector(p2)
+    axis = np.cross(p1, p2)
+    if np.linalg.norm(axis) < 1e-6:
+        return None
+    axis = lower_vector(axis)
+
+    cands = []
+    for c in (p1 + p2, p1 - p2):
+        if np.linalg.norm(c) < 1e-9:
+            continue
+        c = lower_vector(c)
+        interlimb = 2.0 * rad2deg(math.acos(min(1.0, abs(float(np.dot(c, p1))))))
+        cands.append((c, interlimb))
+    if len(cands) < 2:
+        return None
+    # primo candidato = piano assiale piu' ripido (polo piu' orizzontale)
+    cands.sort(key=lambda ci: abs(ci[0][2]))
+    if swap:
+        cands.reverse()
+    (ap, il), (alt, alt_il) = cands
+    ap_dd, ap_dip = plane_from_pole(ap)
+    alt_dd, alt_dip = plane_from_pole(alt)
+    return {
+        'axis': axis,
+        'axial_pole': ap, 'axial_dipdir': ap_dd, 'axial_dip': ap_dip, 'interlimb': il,
+        'alt_pole': alt, 'alt_dipdir': alt_dd, 'alt_dip': alt_dip, 'alt_interlimb': alt_il,
+    }
+
+
+def _principal_axis(vectors):
+    """Autovettore di massimo autovalore del tensore di orientazione
+    (orientazione media di dati assiali), verso il basso."""
+    arr = np.asarray(vectors, dtype=float)
+    w, vecs = np.linalg.eigh(arr.T @ arr)
+    return lower_vector(vecs[:, -1])
+
+
+def suggest_limb_poles(pole_vectors, n_iter=50, min_sep_deg=10.0):
+    """Suggerisce i poli medi dei due fianchi di una piega.
+
+    k-means sferico a due gruppi per dati ASSIALI (somiglianza = |cos|):
+    inizializzazione con la coppia di poli piu' distante, centroide di ogni
+    gruppo = asse principale del suo tensore di orientazione.
+
+    Ritorna [(polo1, n1), (polo2, n2)] (ordinati per trend del polo) oppure
+    None se i dati sono < 4 o i due gruppi distano < min_sep_deg."""
+    if len(pole_vectors) < 4:
+        return None
+    data = np.array([lower_vector(v) for v in pole_vectors], dtype=float)
+    sim = np.abs(data @ data.T)
+    i, j = np.unravel_index(np.argmin(sim), sim.shape)
+    c = np.array([data[i], data[j]])
+    labels = None
+    for _ in range(n_iter):
+        new = np.argmax(np.abs(data @ c.T), axis=1)
+        if labels is not None and np.array_equal(new, labels):
+            break
+        labels = new
+        for k in (0, 1):
+            members = data[labels == k]
+            if len(members):
+                c[k] = _principal_axis(members)
+    counts = [int(np.sum(labels == k)) for k in (0, 1)]
+    if min(counts) == 0:
+        return None
+    sep = rad2deg(math.acos(min(1.0, abs(float(np.dot(c[0], c[1]))))))
+    if sep < min_sep_deg:
+        return None
+    out = [(c[0], counts[0]), (c[1], counts[1])]
+    out.sort(key=lambda pc: vector_to_trend_plunge(pc[0])[0])
+    return out
+
+
+def emphasized_density_levels(z_max, emphasis=0.0, n_intervals=10):
+    """Livelli di contorno con enfasi sulle basse densita'.
+
+    emphasis = 0  -> livelli 'tondi' lineari (come Dips);
+    emphasis -> 1 -> livelli addensati verso lo zero (spaziatura a potenza,
+    esponente fino a 3.5), cosi' anche concentrazioni deboli vengono colorate."""
+    emphasis = max(0.0, min(1.0, float(emphasis)))
+    if emphasis <= 1e-6 or not np.isfinite(z_max) or z_max <= 0:
+        return nice_density_levels(z_max, n_intervals)
+    top = float(z_max) * 1.001              # la fascia piu' alta include il massimo
+    expo = 1.0 + 2.5 * emphasis
+    raw = top * np.linspace(0.0, 1.0, n_intervals + 1) ** expo
+    levels = [0.0]
+    for v in raw[1:]:
+        r = float('{:.2g}'.format(v))       # 2 cifre significative
+        if r <= levels[-1]:
+            r = levels[-1] + top * 1e-3
+        levels.append(r)
+    return np.array(levels)
+
+
 def resultant_length_ratio(pole_vectors):
     """R/N: misura di concentrazione dei dati (1 = perfettamente concentrati)."""
     if len(pole_vectors) == 0:

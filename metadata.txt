@@ -6,7 +6,7 @@ description=Professional stereographic projection (stereonet): polar/equatorial 
 
 about=StereonetStudio draws a stereographic projection (equal-angle / equal-area, lower/upper hemisphere, polar or equatorial grid) starting from structural data (dip/dip direction, strike/dip, trend/plunge), imported from CSV/TXT files or directly from vector layers loaded into the project (with automatic field selection in the menus). Modern tabbed interface (Stereonet, Data, Kinematic Analysis, Rosette), fully translated into Italian and English, with comprehensive options for labels, line weights, colors, poles, density contours (poles, intersections, data column; solid or line style, with fill extending to the great circle boundary), rose diagram of directions, and a complete kinematic analysis module (planar slide, wedge slide, flexural toppling, direct toppling) with envelopes, friction cones, lateral limits, and highlighted zones. The legend and density scale (both in bold, with configurable text size for title/legend/items) are positioned in the top left corner, right below the title which is always fully visible. The panel opens as a pre-resized window and stays on top until closed.
 
-version=1.0.0
+version=1.2.1
 author=Dr. Geol. Faustino Cetraro
 email=geol-faustino@libero.it
 
@@ -21,3 +21,6 @@ deprecated=False
 
 tags=stereonet,stereographic projection,structural geology,kinematic analysis,dip,strike,rock mass,geologia strutturale,rosette,Dips
 
+changelog=1.2.1 - Pole marker fade slider in the Folds tab.
+    1.2.0 - Fold tools moved to a separate "Folds" tab (tab "Kinematic Analysis" renamed "Kinematics"); automatic suggestion of L1/L2 limb poles (two-cluster axial k-means); contour transparency and low-density emphasis sliders.
+    1.1.0 - Fold analysis tools: beta fold hinge (pole to best-fit girdle) shown in legend; axial plane from L1/L2 limb poles picked on the stereonet (fold axis, interlimb angle, swappable bisector); live plane cursor with pole/plane readout and click-to-save; picks stored in a project table layer and exportable to CSV.

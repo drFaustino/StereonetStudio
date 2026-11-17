@@ -182,3 +182,22 @@ def icon_dot(color='#1f6fb2', size=16):
     m = size * 0.2
     p.drawEllipse(QRectF(m, m, size - 2 * m, size - 2 * m))
     return _finish(pm, p)
+
+
+def icon_fold(color='#d35400', size=28):
+    """Icona 'piega': antiforme con traccia del piano assiale."""
+    pm, p = _new_painter(size)
+    pen = QPen(QColor(color)); pen.setWidthF(1.8); pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
+    for off in (0.0, 0.22):
+        pts = []
+        for i in range(21):
+            t = i / 20.0
+            x = size * (0.10 + 0.80 * t)
+            y = size * (0.80 + off * 0.0 - 0.50 * math.sin(math.pi * t)) + size * off * 0.6
+            pts.append(QPointF(x, y))
+        p.drawPolyline(QPolygonF(pts))
+    pen2 = QPen(QColor(color)); pen2.setWidthF(1.2); pen2.setStyle(Qt.PenStyle.DashLine)
+    p.setPen(pen2)
+    p.drawLine(QPointF(size * 0.5, size * 0.12), QPointF(size * 0.5, size * 0.92))
+    return _finish(pm, p)
